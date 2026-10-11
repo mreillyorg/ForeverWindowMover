@@ -1,4 +1,4 @@
-# ForeverWindowMover
+# ForeverWindowMover 0.3.1
 Helps move some of the immovable Blizzard windows
 
 WoW: Forever 1.60.1 (Interface **16001**)
@@ -6,6 +6,8 @@ WoW: Forever 1.60.1 (Interface **16001**)
 Author: Michael Reilly
 
 Source / issues: [https://github.com/mreillyorg/ForeverWindowMover](https://github.com/mreillyorg/ForeverWindowMover)
+
+Full documentation: [`docs/`](docs/README.md) — [user guide](docs/user-guide.md), [architecture](docs/architecture.md), [internal API](docs/api-reference.md), [saved variables](docs/saved-variables.md), [Titan integration](docs/titan-panel-integration.md), [development notes](docs/development.md)
 
 ## NEW IN 0.3.1: AUTHOR AND GITHUB DETAILS
 
@@ -15,7 +17,9 @@ The Options > AddOns panel now shows the author and a selectable GitHub **URL**.
 
 With Titan Panel 9.3.4 for Forever installed and enabled, look for *Window Mover* (or *ForeverWindowMover*) in Titan's available plugins. Enable it on the bar using Titan's own plugin controls.
 
-Left-click: Open Options > AddOns > Forever Window Mover. Right-click: Show or hide **ALL** **MOVE** tabs, without losing positions. Hover: Show which window categories are enabled and have saved locations.
+- Left-click: Open Options > AddOns > Forever Window Mover.
+- Right-click: Show or hide **ALL** **MOVE** tabs, without losing positions.
+- Hover: Show which window categories are enabled and have saved locations.
 
 This is a LibDataBroker 1.1 **LAUNCHER**. It can also be shown by other **LDB** compatible display addons. Titan Panel is **OPTIONAL**. When it isn't installed, Forever Window Mover loads and works just like before, including its AddOns settings. No Titan Panel files or libraries are bundled in this download.
 

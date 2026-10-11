@@ -29,7 +29,7 @@ settings. No Titan Panel files or libraries are bundled in this download.
 
 WINDOWS
 -------
-Merchant / vendor        - MerchantFrame
+Merchant / vendor       - MerchantFrame
 Player-to-player trade  - TradeFrame
 Personal bank           - BankFrame
 Guild bank              - GuildBankFrame
