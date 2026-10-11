@@ -51,14 +51,12 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-$repoRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
-$addonName = 'ForeverWindowMover'
+. (Join-Path $PSScriptRoot 'Common.ps1')
+
+$repoRoot = Get-FwmRepoRoot -ToolsDirectory $PSScriptRoot
+$addonName = $FwmAddonName
 $addonDirectory = Join-Path $repoRoot $addonName
 if (-not $OutputDirectory) { $OutputDirectory = Join-Path $repoRoot 'dist' }
-
-# Files kept in the repository but not shipped: source art the client cannot
-# read, and anything a packaging host would strip anyway.
-$packageExclusions = @('*.png', '*.psd', '*.xcf')
 
 $problems = [System.Collections.Generic.List[string]]::new()
 $changes = [System.Collections.Generic.List[string]]::new()
@@ -101,29 +99,19 @@ function Set-GeneratedFile([string] $path, [string] $content) {
 
 # --- metadata -----------------------------------------------------------------
 
-$tocPath = Join-Path $addonDirectory "$addonName.toc"
-$coreLuaPath = Join-Path $addonDirectory "$addonName.lua"
-foreach ($required in @($tocPath, $coreLuaPath, (Join-Path $repoRoot 'CHANGELOG.md'), (Join-Path $repoRoot 'LICENSE'))) {
+foreach ($required in @((Join-Path $repoRoot 'CHANGELOG.md'), (Join-Path $repoRoot 'LICENSE'))) {
     if (-not (Test-Path -LiteralPath $required)) { throw "Required file not found: $required" }
 }
 
-$tocLines = Get-Content -LiteralPath $tocPath
-function Get-TocField([string] $field) {
-    $match = $tocLines | Where-Object { $_ -match "^##\s*$field\s*:\s*(.+?)\s*$" } | Select-Object -First 1
-    if (-not $match) { return $null }
-    if ($match -match "^##\s*$field\s*:\s*(.+?)\s*$") { return $Matches[1] }
-    return $null
-}
-
-$version = Get-TocField 'Version'
-$interface = Get-TocField 'Interface'
-$iconTexture = Get-TocField 'IconTexture'
-if (-not $version) { throw "No '## Version:' line in $tocPath" }
-if (-not $interface) { throw "No '## Interface:' line in $tocPath" }
-
-$coreLua = Get-Content -LiteralPath $coreLuaPath -Raw
-$author = if ($coreLua -match 'addon\.author\s*=\s*"([^"]+)"') { $Matches[1] } else { $null }
-$website = if ($coreLua -match 'addon\.website\s*=\s*"([^"]+)"') { $Matches[1] } else { $null }
+$meta = Get-FwmMetadata -RepoRoot $repoRoot
+$tocPath = $meta.TocPath
+$tocLines = $meta.TocLines
+$coreLuaPath = $meta.CoreLuaPath
+$version = $meta.Version
+$interface = $meta.Interface
+$iconTexture = $meta.IconTexture
+$author = $meta.Author
+$website = $meta.Website
 if (-not $author) { Add-Problem "Could not read addon.author from $addonName.lua" }
 if (-not $website) { Add-Problem "Could not read addon.website from $addonName.lua" }
 
@@ -282,10 +270,7 @@ $staging = Join-Path ([System.IO.Path]::GetTempPath()) ("fwm-build-" + [guid]::N
 $stagedAddon = Join-Path $staging $addonName
 try {
     New-Item -ItemType Directory -Path $stagedAddon -Force | Out-Null
-    Get-ChildItem -LiteralPath $addonDirectory -File | Where-Object {
-        $name = $_.Name
-        -not ($packageExclusions | Where-Object { $name -like $_ })
-    } | ForEach-Object {
+    Get-FwmShippableFile -AddonDirectory $addonDirectory | ForEach-Object {
         Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $stagedAddon $_.Name)
     }
 

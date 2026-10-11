@@ -27,6 +27,8 @@ Added
 
 - `## IconTexture` in the `.toc`. The client reads BLP and uncompressed TGA textures only, so `tools/Convert-IconToTga.ps1` converts `Ornate-Golden-UI-Mover-Icon.png` to a 64x64 32-bit TGA and the `.toc` points at that. The PNG stays in the repository as the source art and is left out of the package.
 - `tools/build.ps1`: generates the in-package `CHANGELOG.md` and `LICENSE` from the repository originals, verifies that every copy of the version and Interface number agrees with the `.toc`, refreshes the icon, and zips the addon folder into `dist/`. `-Check` verifies without writing anything.
+- `tools/Sync-ToAddOns.ps1`: installs the addon into `Interface\AddOns` for local testing. Mirrors only the files that ship, so the client loads what the zip would contain, and removes files left behind by an older install. Finds the AddOns directory automatically, regenerates first unless `-SkipBuild`, and supports `-Watch` to re-sync on save, `-Mode Junction` to link the repository folder instead of copying, `-Remove` to uninstall, and `-WhatIf` for a dry run. The target path must be an `AddOns\ForeverWindowMover` folder before anything is written or deleted.
+- `tools/Common.ps1`: the addon name, package exclusion list, `.toc` parsing, metadata reads, AddOns discovery and target-path guard shared by the scripts above, so the exclusion list has one definition rather than two.
 
 Unchanged
 

@@ -16,7 +16,9 @@ ForeverWindowMover-repo/
 │   └── LICENSE                <- generated from LICENSE
 ├── docs/                      <- this documentation
 ├── tools/
+│   ├── Common.ps1             <- shared helpers, dot-sourced by the others
 │   ├── build.ps1              <- generate in-package copies, check, package
+│   ├── Sync-ToAddOns.ps1      <- install into Interface\AddOns for testing
 │   └── Convert-IconToTga.ps1  <- PNG source art -> client-readable TGA
 ├── dist/                      <- build output, git-ignored
 ├── README.md
@@ -24,13 +26,43 @@ ForeverWindowMover-repo/
 └── LICENSE
 ```
 
-For testing, the `ForeverWindowMover` folder is what goes into `Interface\AddOns\`. A symlink or junction from the AddOns directory to the repo folder avoids copying on every change:
+There is no package manager and no test harness — the client is the only runtime. The two scripts worth knowing are `tools/Sync-ToAddOns.ps1` for getting the addon in front of the client, and `tools/build.ps1` for releasing it.
+
+## Installing it for testing
 
 ```powershell
-New-Item -ItemType Junction -Path "C:\Program Files (x86)\World of Warcraft\_classic_beta_\Interface\AddOns\ForeverWindowMover" -Target "<repo>\ForeverWindowMover"
+.\tools\Sync-ToAddOns.ps1            # regenerate, then mirror into Interface\AddOns
+.\tools\Sync-ToAddOns.ps1 -WhatIf    # dry run: what would be copied or deleted
+.\tools\Sync-ToAddOns.ps1 -Watch     # re-sync on every save, until Ctrl+C
+.\tools\Sync-ToAddOns.ps1 -Remove    # uninstall
 ```
 
-There is no package manager and no test harness — the client is the only runtime. The one build step is `tools/build.ps1`, and it is not needed to run the addon from a junction.
+It mirrors **only the files that ship** — `Get-FwmShippableFile` is the same helper the zip uses — so what you load in the client is what goes in the release, source PNG and all other exclusions left behind. Files from an older install that are no longer part of the addon are deleted, which is how a stale copy gets cleaned up rather than quietly shadowing the new one.
+
+Unless you pass `-SkipBuild`, it runs `build.ps1 -SkipPackage` first, so the generated `CHANGELOG.md`, `LICENSE` and icon TGA are current before the copy. If `build.ps1` reports a problem, nothing is synced.
+
+The AddOns directory is found automatically, in this order: `$env:WOW_ADDONS_PATH`, then by walking up from the repository — which is what resolves it when the checkout lives inside the WoW tree, as it does here — then the default install locations. If more than one candidate turns up, the script stops and lists them rather than guessing a flavour. Use `-AddOnsPath` to be explicit.
+
+### Copy vs junction
+
+| | `-Mode Copy` (default) | `-Mode Junction` |
+| --- | --- | --- |
+| What the client loads | A mirror of the shipping files | The repository folder itself |
+| After an edit | Re-run the sync (or leave `-Watch` running) | Nothing, edits are already live |
+| Non-shipping files visible to the client | No | Yes, including the ~2 MB source PNG |
+| Matches what users get | Yes | No |
+
+`Copy` is the default because it is the one that catches "works from the repo, broken in the zip" — a missing `.toc` entry, or a file the exclusion list removes. Reach for `Junction` when you are iterating on Lua and tired of re-syncing. Replacing an existing real folder with a junction needs `-Force`, and the two modes refuse to stomp each other: `Copy` will not write through a junction, and `Junction` will not silently delete a real folder.
+
+Either way, the client has to be told to re-read the files. **Lua changes need `/reload`; `.toc` and metadata changes need a full client restart.** The script warns when it detects a running client.
+
+### Safety
+
+The scripts write into a game install, and the sync deletes stale files, so the target path is validated before anything is touched: it must be named `ForeverWindowMover` and its parent must be an `AddOns` directory (`Assert-FwmSafeTargetPath`). A bad `-AddOnsPath` fails instead of pointing a recursive delete somewhere unfortunate. `-Remove` on a junction deletes the link only, never the repository behind it. Both scripts support `-WhatIf`.
+
+## tools/Common.ps1
+
+Dot-sourced by the other scripts. It holds the addon name, the package exclusion list, `.toc` field parsing, the version/author metadata reads, the shippable-file selection, AddOns discovery and the target-path guard. Same reasoning as generating the in-package changelog: `build.ps1` and `Sync-ToAddOns.ps1` both need the exclusion list, and two hand-maintained copies would drift.
 
 ## Generated files
 
@@ -55,7 +87,7 @@ Editing either copy by hand is how the 0.3.1 changelogs drifted apart. Change `C
 
 What it does, in order:
 
-1. Reads `## Version`, `## Interface` and `## IconTexture` from the `.toc`, and `addon.author` / `addon.website` from `ForeverWindowMover.lua`, so the attribution line it generates has one source.
+1. Reads `## Version`, `## Interface` and `## IconTexture` from the `.toc`, and `addon.author` / `addon.website` from `ForeverWindowMover.lua` (via `Get-FwmMetadata`), so the attribution line it generates has one source.
 2. Checks the version in the core Lua header comment, `addon.version`, the `README.md` title, the `README.txt` title, and that `CHANGELOG.md` has a `## <version>` section. **The `.toc` is authoritative.**
 3. Checks the Interface number is quoted in `README.md`, `README.txt` and `docs/README.md`.
 4. Checks the `.toc` and the addon folder agree on which `.lua` files exist, and that `## IconTexture` resolves to a file that is actually there and is not a PNG.
@@ -119,12 +151,15 @@ Combat:
 - [ ] Clicking a MOVE tab in combat does nothing and does not error.
 - [ ] Right-clicking the Titan launcher in combat prints the combat message.
 
-Packaging:
+Packaging and tooling:
 
 - [ ] `.\tools\build.ps1 -Check` passes on a clean checkout.
 - [ ] Hand-editing `ForeverWindowMover/CHANGELOG.md` makes `-Check` fail.
 - [ ] The addon shows its icon in the character-select AddOns list.
 - [ ] The zip in `dist/` contains a `ForeverWindowMover` folder, no `.png`, and loads when dropped into `Interface\AddOns\`.
+- [ ] `.\tools\Sync-ToAddOns.ps1` reports `0 added, 0 updated, 0 removed` on a second consecutive run.
+- [ ] A junk file dropped into the installed folder is removed by the next sync.
+- [ ] `-Remove` after `-Mode Junction` leaves the repository folder intact.
 
 Titan / LDB:
 
