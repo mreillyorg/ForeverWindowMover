@@ -30,7 +30,9 @@ Game addons cannot open an external browser, so the tooltip's last line points a
 
 ## Registration strategy
 
-`TryBroker()` runs immediately on file load and again on every `ADDON_LOADED` and on `PLAYER_LOGIN` — enough to catch Titan or a library loading after Forever Window Mover, without registering any build-specific events. It is a no-op once an object has been acquired.
+`TryBroker()` runs immediately on file load. If that attempt did not produce an object — the usual case, since LibStub and LDB may not be loaded yet — a listener is created for `ADDON_LOADED` and `PLAYER_LOGIN`, enough to catch Titan or a library loading after Forever Window Mover without registering any build-specific events.
+
+The listener unregisters itself and drops its `OnEvent` script as soon as an object exists, so it does not wake for every addon load for the rest of the session. Keeping it alive bought nothing: once registered, the launcher's state is kept current by `addon.RefreshBroker()`, which the core calls directly and which needs no events.
 
 Each step fails soft:
 

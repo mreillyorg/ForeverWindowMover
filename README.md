@@ -1,4 +1,4 @@
-# ForeverWindowMover 0.3.1
+# ForeverWindowMover 0.3.2
 Helps move some of the immovable Blizzard windows
 
 WoW: Forever 1.60.1 (Interface **16001**)
@@ -8,6 +8,10 @@ Author: Michael Reilly
 Source / issues: [https://github.com/mreillyorg/ForeverWindowMover](https://github.com/mreillyorg/ForeverWindowMover)
 
 Full documentation: [`docs/`](docs/README.md) — [user guide](docs/user-guide.md), [architecture](docs/architecture.md), [internal API](docs/api-reference.md), [saved variables](docs/saved-variables.md), [Titan integration](docs/titan-panel-integration.md), [development notes](docs/development.md)
+
+## NEW IN 0.3.2: DRAG AND RESET FIXES, ADDON LIST ICON
+
+A maintenance release. Dragging now ends reliably when you release the mouse at a screen edge, instead of leaving the window stuck to the cursor. **Reset** and the per-window checkbox put a window back where Blizzard had it, which some windows previously got wrong. A window dragged to the very top of the screen keeps its **MOVE** tab reachable. The addon list now shows an icon. Saved positions and the saved-position format are unchanged.
 
 ## NEW IN 0.3.1: AUTHOR AND GITHUB DETAILS
 

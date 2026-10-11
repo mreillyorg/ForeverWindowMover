@@ -1,6 +1,6 @@
 # Forever Window Mover — Documentation
 
-Addon documentation for **Forever Window Mover** 0.3.1, a World of Warcraft: Forever (Interface `16001`) addon that makes several normally immovable Blizzard windows draggable and remembers where you put them.
+Addon documentation for **Forever Window Mover** 0.3.2, a World of Warcraft: Forever (Interface `16001`) addon that makes several normally immovable Blizzard windows draggable and remembers where you put them.
 
 - Author: Michael Reilly
 - Source / issues: https://github.com/mreillyorg/ForeverWindowMover

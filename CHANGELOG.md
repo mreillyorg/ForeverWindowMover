@@ -4,6 +4,32 @@ All notable changes to **Forever Window Mover**. Every release so far targets Wo
 
 Release dates are not recorded in the repository history, so versions are listed newest-first without dates.
 
+## 0.3.2
+
+Fixed
+
+- Saved positions are re-applied through the same scale conversion used to store them. `SetPoint` offsets are measured in the anchored frame's own coordinate space while positions are stored in UIParent units, so a frame whose scale differed from `UIParent`'s landed short of where it was dropped and drifted further on every subsequent drag. Every frame at Blizzard's default scale was unaffected, which is why this went unnoticed.
+- Dragging uses `OnDragStart` / `OnDragStop` instead of `OnMouseDown` / `OnMouseUp`. The window is clamped to the screen but the cursor is not, so releasing the button at a screen edge could happen away from the MOVE tab. `OnMouseUp` is delivered by cursor position and was missed in that case, leaving the window stuck to the mouse until it was closed. A side effect: clicking a MOVE tab without dragging no longer saves a zero-distance move.
+- Blizzard's original anchors are no longer overwritten by the addon's own. A frame created with no anchors had nothing to snapshot at install time, and the later snapshot recorded the addon's own `CENTER` anchor as the "original", so Disable and Reset restored the addon's position instead of Blizzard's layout. Anchors are now captured at `OnShow`, before the deferred apply, and a per-frame flag refuses any snapshot taken after the addon has moved the frame.
+- The MOVE tab flips inside the window's top edge when there is no room above it. Clamping applies to the window, not to its child handle, so a window dragged to the top of the display left its tab off-screen and unclickable, recoverable only from the options panel.
+- `addon.OpenOptions()` accepts a string category ID as well as a number, instead of falling back to the chat hint on builds where `category:GetID()` does not return a number.
+- The per-group enable checkboxes are disabled during combat lockdown, like every other control on the panel. They previously stayed clickable and only printed a refusal after the fact.
+
+Changed
+
+- Frame discovery no longer runs a permanent `OnUpdate`. It is a bounded ~1 Hz burst, restarted by `ADDON_LOADED` and `PLAYER_LOGIN`, extended while in combat (when installation is refused anyway), and cancelled once there is nothing left to find. Native frames only appear at login or when the addon owning them loads, and both restart the burst. `C_Timer.NewTicker` is used where available, with the previous throttled `OnUpdate` as a self-removing fallback.
+- The options panel derives its geometry from a layout table and a vertical cursor, and sizes itself to its content rather than a fixed 640x550. Combat state is polled from the panel's own `OnUpdate` while it is shown, so controls re-enable as soon as combat ends — without registering `PLAYER_REGEN_ENABLED`, which 0.2.1 removed for aborting the addon on Forever.
+- The Titan / LibDataBroker listener unregisters itself once the launcher exists, instead of waking for every addon load for the rest of the session.
+
+Added
+
+- `## IconTexture` in the `.toc`. The client reads BLP and uncompressed TGA textures only, so `tools/Convert-IconToTga.ps1` converts `Ornate-Golden-UI-Mover-Icon.png` to a 64x64 32-bit TGA and the `.toc` points at that. The PNG stays in the repository as the source art and is left out of the package.
+- `tools/build.ps1`: generates the in-package `CHANGELOG.md` and `LICENSE` from the repository originals, verifies that every copy of the version and Interface number agrees with the `.toc`, refreshes the icon, and zips the addon folder into `dist/`. `-Check` verifies without writing anything.
+
+Unchanged
+
+- The `ForeverWindowMoverDB` format, the group list, and the group keys. Positions from 0.1.0, 0.2.x, and 0.3.0/0.3.1 load as-is.
+
 ## 0.3.1
 
 Added

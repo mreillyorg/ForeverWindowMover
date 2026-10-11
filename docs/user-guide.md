@@ -19,8 +19,10 @@ The `.toc` targets Interface `16001` (WoW: Forever 1.60.1). On other client buil
 Notes:
 
 - Windows are clamped to the screen, so you cannot drag one fully off-display.
+- If you drag a window right to the top of the screen, the **MOVE** tab moves to just inside the window's top edge so it stays clickable.
 - Each Blizzard frame remembers its own position. Moving the vendor window does not move the bank.
 - Dragging is blocked during combat. Leave combat and try again.
+- Clicking the tab without moving the mouse does nothing. You need to actually drag.
 - If a window is closed mid-drag, the move is finalised and the current position is saved.
 
 ## Options panel
@@ -38,7 +40,7 @@ Open **Game Menu > Options > AddOns > Forever Window Mover**, or left-click the 
 
 Blizzard's **Defaults** button on the settings page resets all positions, re-enables every group, and turns MOVE handles back on.
 
-All controls are disabled while you are in combat lockdown. The panel re-enables them the next time it refreshes.
+All controls are disabled while you are in combat lockdown, and the status line says so. If you are looking at the page when combat ends, the controls come back on their own within a fraction of a second.
 
 ## Resetting vs disabling
 
@@ -52,7 +54,7 @@ Hiding all MOVE handles does neither; it only hides the drag tabs.
 ## Troubleshooting
 
 **No MOVE tab on a window.**
-Confirm the group is enabled and **Show MOVE handles** is on. A few frames are only created the first time you use the feature; the addon rescans about once a second, so open the window and give it a moment. Frames the client refuses to make movable are skipped silently.
+Confirm the group is enabled and **Show MOVE handles** is on. A few frames are only created the first time you use the feature; the addon rescans about once a second for a short while after login and after any addon loads, so open the window and give it a moment. Frames the client refuses to make movable are skipped silently.
 
 **A window will not move.**
 You are probably in combat. Some frames are protected on certain beta builds; the addon catches those failures rather than erroring, so a single stubborn frame does not break the rest.
@@ -61,4 +63,7 @@ You are probably in combat. Some frames are protected on certain beta builds; th
 Blizzard's UI panel manager repositions managed frames. Forever Window Mover re-applies your saved position after `UpdateUIPanelPositions` runs, which normally wins. If a frame still fights back, reset that group and move it again.
 
 **The options page is missing.**
-The page registers at login and the addon retries each second if Blizzard's settings UI was not ready. If registration fails outright, the addon prints the error to chat once.
+The page registers at login and the addon retries for a few seconds if Blizzard's settings UI was not ready. If registration fails outright, the addon prints the error to chat once.
+
+**Reset put a window somewhere odd.**
+Fixed in 0.3.2 for windows that the client creates on first use. Before that, the addon could record its own position as the window's "original" one and restore to that. If a window is still in the wrong place, reset it, close and reopen it, then drag it again.

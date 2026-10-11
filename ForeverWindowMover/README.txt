@@ -1,8 +1,17 @@
-FOREVER WINDOW MOVER 0.3.1
+FOREVER WINDOW MOVER 0.3.2
 =========================
 WoW: Forever 1.60.1 (Interface 16001)
 Author: Michael Reilly
 Source / issues: https://github.com/mreillyorg/ForeverWindowMover
+
+NEW IN 0.3.2: DRAG AND RESET FIXES, ADDON LIST ICON
+---------------------------------------------------
+A maintenance release. Dragging now ends reliably when you release the
+mouse at a screen edge, instead of leaving the window stuck to the cursor.
+Reset and the per-window checkbox put a window back where Blizzard had it,
+which some windows previously got wrong. A window dragged to the very top
+of the screen keeps its MOVE tab reachable. The addon list now shows an
+icon. Saved positions and the saved-position format are unchanged.
 
 NEW IN 0.3.1: AUTHOR AND GITHUB DETAILS
 ---------------------------------------

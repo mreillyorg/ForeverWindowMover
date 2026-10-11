@@ -6,7 +6,7 @@ These functions live on the private addon table shared by the three Lua files (`
 
 | Field | Type | Notes |
 | --- | --- | --- |
-| `addon.version` | `string` | `"0.3.1"`. Display only. Keep in sync with the `.toc` `## Version`. |
+| `addon.version` | `string` | `"0.3.2"`. Display only. The `.toc` `## Version` is the source of truth; `tools/build.ps1` fails if the two disagree. |
 | `addon.author` | `string` | `"Michael Reilly"`. |
 | `addon.website` | `string` | GitHub URL shown in the options panel edit box and the Titan tooltip. |
 | `addon.groups` | `array` | Ordered list of `{key, label, frames}`. Drives options rows, tooltip lines, discovery, and reset. See [supported windows](supported-windows.md). |
@@ -36,7 +36,7 @@ Sets `db.enabled[key]`. Enabling re-applies saved positions for the group's fram
 Sets `db.showHandles`, shows or hides every installed handle, refreshes options and the broker. Does not touch `db.enabled` or `db.positions`.
 
 ### `addon.ResetGroup(key) -> boolean`
-For each frame in the group: deletes the stored position, aborts any in-progress drag, restores original anchors, and clears `SetUserPlaced`. Then recalculates the native panel layout and refreshes options.
+For each frame in the group: deletes the stored position, aborts any in-progress drag, restores original anchors, clears `SetUserPlaced`, and re-evaluates the handle anchor. Then recalculates the native panel layout and refreshes options. A frame whose original anchors were never captured keeps its current ones — see [restore paths](architecture.md#restore-paths).
 
 ### `addon.ResetAll() -> boolean`
 `ResetGroup` across every group, with a single layout recalculation and options refresh at the end.
@@ -49,10 +49,12 @@ Builds the canvas panel and registers it via `Settings.RegisterCanvasLayoutCateg
 The panel supplies the hooks Blizzard's canvas registration expects: `OnRefresh`, `OnCommit` (no-op), and `OnDefault` (reset all, re-enable every group, show handles).
 
 ### `addon.OpenOptions() -> boolean`
-Lazily creates the panel if needed, then `Settings.OpenToCategory(category:GetID())`. Returns `false` if the settings API, the category, or its numeric ID is unavailable, which is how the Titan launcher knows to fall back to a chat hint. Every step is `pcall`-guarded.
+Lazily creates the panel if needed, then `Settings.OpenToCategory(category:GetID())`. Accepts a `number` or `string` category ID, since not every build returns a number. Returns `false` if the settings API, the category, or its ID is unavailable, which is how the Titan launcher knows to fall back to a chat hint. Every step is `pcall`-guarded.
 
 ### `addon.RefreshOptions()`
 Installed by `CreateOptions`. Re-syncs checkboxes, Saved/Not set labels, and enabled states — but only while the panel is shown. Called by the core after any state change. The core always calls it defensively (`if addon.RefreshOptions then ... end`) because it does not exist until the panel is built.
+
+Note that the panel also refreshes itself: its `OnUpdate` polls `addon.CanChangeFrames()` and re-runs the internal `Refresh` when combat state flips, so controls grey out and come back without the core having to push anything. Every control, including the per-group enable checkboxes, is disabled during lockdown.
 
 ## Broker integration (defined in `TitanBroker.lua`)
 

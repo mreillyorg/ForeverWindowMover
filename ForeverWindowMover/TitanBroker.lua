@@ -1,6 +1,6 @@
 -- Optional LibDataBroker launcher for Titan Panel and other LDB displays.
 -- Never creates or loads Titan itself. Missing libraries do not affect FWM.
-local addonName, addon = ...
+local _, addon = ...
 
 local brokerName = "ForeverWindowMover"
 local object
@@ -90,15 +90,24 @@ local function TryBroker()
     if okCreate then object = result end
 end
 
+TryBroker()
+
 -- ADDON_LOADED also catches Titan being enabled/loaded after FWM.
 -- PLAYER_LOGIN is a final attempt for libraries that finish during startup.
--- Only these two universally supported events are registered.
-local listener = CreateFrame("Frame")
-listener:RegisterEvent("ADDON_LOADED")
-listener:RegisterEvent("PLAYER_LOGIN")
-listener:SetScript("OnEvent", function(_, event)
-    if event == "ADDON_LOADED" or event == "PLAYER_LOGIN" then
+-- Only these two universally supported events are registered, and only while
+-- there is still something to retry: once the launcher exists the listener
+-- unregisters itself rather than waking for every addon load for the rest of
+-- the session. The core keeps the launcher's state current through
+-- addon.RefreshBroker, which needs no events of its own.
+if not object then
+    local listener = CreateFrame("Frame")
+    listener:RegisterEvent("ADDON_LOADED")
+    listener:RegisterEvent("PLAYER_LOGIN")
+    listener:SetScript("OnEvent", function(self)
         TryBroker()
-    end
-end)
-TryBroker()
+        if object then
+            self:UnregisterAllEvents()
+            self:SetScript("OnEvent", nil)
+        end
+    end)
+end
