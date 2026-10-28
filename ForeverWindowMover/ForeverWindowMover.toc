@@ -1,7 +1,7 @@
 ## Interface: 16001
 ## Title: Forever Window Mover
 ## Notes: Drag and save individual window positions; Options > AddOns; optional Titan Panel launcher.
-## Version: 0.3.2
+## Version: 0.3.3
 ## Author: Michael Reilly
 ## X-Website: https://github.com/mreillyorg/ForeverWindowMover
 ## IconTexture: Interface\AddOns\ForeverWindowMover\Ornate-Golden-UI-Mover-Icon.tga

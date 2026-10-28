@@ -6,6 +6,25 @@ Author: Michael Reilly · Source / issues: https://github.com/mreillyorg/Forever
 
 Release dates are not recorded in the repository history, so versions are listed newest-first without dates.
 
+## 0.3.3
+
+A repository and tooling release. **No Lua in the addon changed**, so in-game behaviour, the group list and the `ForeverWindowMoverDB` format are identical to 0.3.2.
+
+Added
+
+- `tools/Sync-ToAddOns.ps1`: installs the addon into `Interface\AddOns` for local testing. Mirrors only the files that ship, so the client loads what the zip would contain, and deletes files left behind by an older install instead of letting them shadow the new ones. Finds the AddOns directory automatically — `$env:WOW_ADDONS_PATH`, then by walking up from the repository, then the default install locations — and stops rather than guessing if more than one candidate turns up. Regenerates first unless `-SkipBuild`. Supports `-Watch` to re-sync on save, `-Mode Junction` to link the repository folder instead of copying, `-Remove` to uninstall, and `-WhatIf` for a dry run.
+- `tools/Common.ps1`: the addon name, package exclusion list, `.toc` parsing, version/author metadata reads, shippable-file selection, AddOns discovery and target-path guard, shared by `build.ps1` and `Sync-ToAddOns.ps1`. The exclusion list now has one definition rather than one per script, which is the same reasoning behind generating the in-package changelog.
+
+Changed
+
+- `tools/build.ps1` reads its metadata through `Common.ps1` instead of parsing the `.toc` itself. Behaviour and output are unchanged.
+- The sync and packaging scripts validate their target before writing or deleting: the folder must be named `ForeverWindowMover` and its parent must be an `AddOns` directory. These scripts write into a game install, so a mistyped `-AddOnsPath` fails instead of pointing a recursive delete somewhere unfortunate.
+
+Fixed
+
+- `docs/supported-windows.md` still told you that adding a group meant shifting hardcoded offsets inside a fixed 640x550 panel. That stopped being true in 0.3.2, when the options panel moved to a layout cursor. It now documents the real remaining constraint: the derived height grows 34px per row and a settings canvas does not scroll.
+- `docs/development.md` recommended creating the AddOns junction by hand; it now points at `Sync-ToAddOns.ps1` and explains when a junction is the wrong choice.
+
 ## 0.3.2
 
 Fixed
@@ -27,8 +46,6 @@ Added
 
 - `## IconTexture` in the `.toc`. The client reads BLP and uncompressed TGA textures only, so `tools/Convert-IconToTga.ps1` converts `Ornate-Golden-UI-Mover-Icon.png` to a 64x64 32-bit TGA and the `.toc` points at that. The PNG stays in the repository as the source art and is left out of the package.
 - `tools/build.ps1`: generates the in-package `CHANGELOG.md` and `LICENSE` from the repository originals, verifies that every copy of the version and Interface number agrees with the `.toc`, refreshes the icon, and zips the addon folder into `dist/`. `-Check` verifies without writing anything.
-- `tools/Sync-ToAddOns.ps1`: installs the addon into `Interface\AddOns` for local testing. Mirrors only the files that ship, so the client loads what the zip would contain, and removes files left behind by an older install. Finds the AddOns directory automatically, regenerates first unless `-SkipBuild`, and supports `-Watch` to re-sync on save, `-Mode Junction` to link the repository folder instead of copying, `-Remove` to uninstall, and `-WhatIf` for a dry run. The target path must be an `AddOns\ForeverWindowMover` folder before anything is written or deleted.
-- `tools/Common.ps1`: the addon name, package exclusion list, `.toc` parsing, metadata reads, AddOns discovery and target-path guard shared by the scripts above, so the exclusion list has one definition rather than two.
 
 Unchanged
 

@@ -29,5 +29,5 @@ Append an entry to `addon.groups`:
 
 Nothing else needs changing. The options rows, the Titan tooltip lines, discovery, saving, and reset all iterate `addon.groups`. Two things to keep in mind:
 
-- The options panel lays rows out at a fixed pitch (`-116 - (i - 1) * 42`), and the handles checkbox and reset button sit at fixed offsets near the bottom of a 640x550 canvas. Adding rows means moving those and growing the panel.
-- Once a `key` has shipped, changing it orphans users' `enabled` flags for that group. Keys are effectively part of the saved-variable contract.
+- **Panel height.** Since 0.3.2 the options panel places rows with a layout cursor and sizes itself to its content, so no offsets need editing — but the height still grows by `LAYOUT.rowHeight` (34px) per row. Eight groups come to 552px, which is about as tall as Blizzard's settings canvas will show; a canvas category does not scroll. Past roughly eight groups, reduce `LAYOUT.rowHeight` or split the list into sections rather than letting the bottom controls fall off the page. See [architecture](architecture.md#options-panel-layout).
+- **Key stability.** Once a `key` has shipped, changing it orphans users' `enabled` flags for that group. Keys are effectively part of the saved-variable contract.

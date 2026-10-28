@@ -1,4 +1,4 @@
-# ForeverWindowMover 0.3.2
+# ForeverWindowMover 0.3.3
 Helps move some of the immovable Blizzard windows
 
 WoW: Forever 1.60.1 (Interface **16001**)
@@ -8,6 +8,10 @@ Author: Michael Reilly
 Source / issues: [https://github.com/mreillyorg/ForeverWindowMover](https://github.com/mreillyorg/ForeverWindowMover)
 
 Full documentation: [`docs/`](docs/README.md) — [user guide](docs/user-guide.md), [architecture](docs/architecture.md), [internal API](docs/api-reference.md), [saved variables](docs/saved-variables.md), [Titan integration](docs/titan-panel-integration.md), [development notes](docs/development.md)
+
+## NEW IN 0.3.3: NOTHING, IF YOU ONLY PLAY THE GAME
+
+A repository and tooling release. The addon's code is **unchanged** from 0.3.2, so there is nothing to relearn and nothing to reconfigure. If you are upgrading from 0.3.1, the fixes you want are in the 0.3.2 notes below. The new material is build and local-testing scripts under [`tools/`](docs/development.md), which only matter if you work on the addon.
 
 ## NEW IN 0.3.2: DRAG AND RESET FIXES, ADDON LIST ICON
 
