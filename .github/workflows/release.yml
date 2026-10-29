@@ -34,7 +34,12 @@ jobs:
       # itself does not check any of that.
       - name: Validate the release
         shell: pwsh
-        run: ./tools/build.ps1 -Check
+        run: |
+          ./tools/build.ps1 -Check
+          # Propagate explicitly. build.ps1 calls exit itself, and relying on
+          # that to surface through the shell wrapper is too subtle to trust
+          # for the step that is supposed to stop a bad release.
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Package and release
         uses: BigWigsMods/packager@v2

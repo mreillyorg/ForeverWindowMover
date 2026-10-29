@@ -113,7 +113,10 @@ foreach ($site in $versionSites) {
 }
 
 # The Interface number is quoted in the user-facing text as well.
-foreach ($path in @((Join-Path $repoRoot 'README.md'), (Join-Path $repoRoot 'docs\README.md'))) {
+# Join-Path per segment, not 'docs\README.md': a backslash is a legal
+# filename character on Linux, so the combined literal would not resolve on
+# the CI runner and this check would report the file as missing.
+foreach ($path in @((Join-Path $repoRoot 'README.md'), (Join-Path (Join-Path $repoRoot 'docs') 'README.md'))) {
     $text = Get-TextOrNull $path
     if ($null -eq $text) {
         Add-Problem "$(Get-Relative $path) is missing."
