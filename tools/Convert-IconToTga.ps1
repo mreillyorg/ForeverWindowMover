@@ -24,8 +24,8 @@
 #>
 [CmdletBinding()]
 param(
-    [string] $SourcePath = (Join-Path (Join-Path $PSScriptRoot '..') 'Ornate-Golden-UI-Mover-Icon.png'),
-    [string] $DestinationPath = (Join-Path (Join-Path $PSScriptRoot '..') 'Ornate-Golden-UI-Mover-Icon.tga'),
+    [string] $SourcePath = (Join-Path $PSScriptRoot '..\Ornate-Golden-UI-Mover-Icon.png'),
+    [string] $DestinationPath = (Join-Path $PSScriptRoot '..\Ornate-Golden-UI-Mover-Icon.tga'),
     [int] $Size = 64,
     [switch] $Force
 )
