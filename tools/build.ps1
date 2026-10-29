@@ -1,45 +1,46 @@
 <#
 .SYNOPSIS
-    Generates the in-package copies, checks version consistency, and zips the
-    addon folder for distribution.
+    Validates the release and builds a local zip matching what CurseForge gets.
 
 .DESCRIPTION
-    The repository keeps two copies of some files: one for people reading the
-    repo and one shipped inside the addon folder. Maintaining both by hand is
-    how the 0.3.1 changelogs drifted apart, so the shipped copies are generated
-    here from the repo originals instead:
+    Release packaging and publishing are done by the BigWigs packager from
+    .github/workflows/release.yml when an annotated tag is pushed. This script
+    is the validation gate that runs before it, and a local zip builder for
+    testing the package by hand.
 
-        CHANGELOG.md -> ForeverWindowMover/CHANGELOG.md
-            Same body, with the author/source line added (the repo copy links
-            to docs/ instead, which does not ship) and the footer links dropped.
-        LICENSE      -> ForeverWindowMover/LICENSE
-            Verbatim copy.
+    It checks what the packager does not:
 
-    ForeverWindowMover/README.txt is NOT generated. It is hand-wrapped plain
-    text with deliberately different formatting from README.md, so the script
-    only verifies that its version and Interface headers agree with the .toc.
+      - Every place the version is written agrees with the .toc ## Version,
+        which is authoritative.
+      - The Interface number is quoted consistently in the user-facing text.
+      - The .toc and the working tree agree on which .lua files exist.
+      - ## IconTexture resolves to a file that is present and is not a PNG,
+        which the client cannot read.
+      - .pkgmeta exists, its package-as matches the .toc name, and it does not
+        ignore a file the addon needs.
 
-    The script is also the version gate: the .toc's ## Version is authoritative
-    and every other place the version appears must match it.
+    The set of files that ship comes from the .pkgmeta ignore list via
+    Get-FwmShippableFile, so this zip and a CurseForge upload cannot disagree
+    about their contents.
 
 .PARAMETER Check
-    Verify only. Reports what would change and exits non-zero if anything is
-    inconsistent or out of date. Nothing is written. Suitable for CI or a
-    pre-commit hook.
+    Verify only, write nothing, exit non-zero on any problem. This is what CI
+    runs before handing over to the packager, and it works as a pre-commit
+    hook.
 
 .PARAMETER SkipPackage
-    Generate and verify, but do not build the zip.
+    Validate but do not build the zip.
 
 .PARAMETER OutputDirectory
     Where the zip is written. Defaults to dist/ at the repository root.
 
 .EXAMPLE
     .\tools\build.ps1
-    Regenerate the in-package copies and write dist/ForeverWindowMover-x.y.z.zip.
+    Validate and write dist/ForeverWindowMover-x.y.z.zip.
 
 .EXAMPLE
     .\tools\build.ps1 -Check
-    Fail if the shipped copies or any version string are out of sync.
+    Fail if any version string, the icon, or .pkgmeta is out of sync.
 #>
 [CmdletBinding()]
 param(
@@ -55,7 +56,6 @@ $ErrorActionPreference = 'Stop'
 
 $repoRoot = Get-FwmRepoRoot -ToolsDirectory $PSScriptRoot
 $addonName = $FwmAddonName
-$addonDirectory = Join-Path $repoRoot $addonName
 if (-not $OutputDirectory) { $OutputDirectory = Join-Path $repoRoot 'dist' }
 
 $problems = [System.Collections.Generic.List[string]]::new()
@@ -69,105 +69,93 @@ function Get-TextOrNull([string] $path) {
     return Get-Content -LiteralPath $path -Raw
 }
 
-# Writes $content to $path unless -Check, and records whether it differed.
-function Set-GeneratedFile([string] $path, [string] $content) {
-    $relative = $path.Substring($repoRoot.Length).TrimStart('\', '/')
-    $existing = Get-TextOrNull $path
-    # Compare on normalised newlines so a CRLF/LF checkout difference is not
-    # reported as drift.
-    $normalise = { param($text) if ($null -eq $text) { $null } else { $text -replace "`r`n", "`n" } }
-    if ((& $normalise $existing) -eq (& $normalise $content)) { return }
-
-    if ($Check) {
-        if ($null -eq $existing) {
-            Add-Problem "$relative is missing; run tools\build.ps1 to generate it."
-        }
-        else {
-            Add-Problem "$relative is out of sync with its source; run tools\build.ps1 to regenerate it."
-        }
-        return
-    }
-
-    $directory = Split-Path -Parent $path
-    if (-not (Test-Path -LiteralPath $directory)) {
-        New-Item -ItemType Directory -Path $directory -Force | Out-Null
-    }
-    # UTF-8 without a BOM, LF endings: what the repository already uses.
-    [System.IO.File]::WriteAllText($path, ($content -replace "`r`n", "`n"), (New-Object System.Text.UTF8Encoding $false))
-    Add-Change "wrote $relative"
+function Get-Relative([string] $path) {
+    return $path.Substring($repoRoot.Length).TrimStart('\', '/')
 }
 
 # --- metadata -----------------------------------------------------------------
 
-foreach ($required in @((Join-Path $repoRoot 'CHANGELOG.md'), (Join-Path $repoRoot 'LICENSE'))) {
-    if (-not (Test-Path -LiteralPath $required)) { throw "Required file not found: $required" }
-}
-
 $meta = Get-FwmMetadata -RepoRoot $repoRoot
-$tocPath = $meta.TocPath
-$tocLines = $meta.TocLines
-$coreLuaPath = $meta.CoreLuaPath
 $version = $meta.Version
 $interface = $meta.Interface
-$iconTexture = $meta.IconTexture
-$author = $meta.Author
-$website = $meta.Website
-if (-not $author) { Add-Problem "Could not read addon.author from $addonName.lua" }
-if (-not $website) { Add-Problem "Could not read addon.website from $addonName.lua" }
 
+if (-not $meta.Author) { Add-Problem "Could not read addon.author from $addonName.lua" }
+if (-not $meta.Website) { Add-Problem "Could not read addon.website from $addonName.lua" }
+
+$curseId = $meta.CurseProjectId
 Write-Host "$addonName $version (Interface $interface)"
+if ($curseId) {
+    Write-Host "  CurseForge project $curseId"
+}
+else {
+    Write-Host '  no ## X-Curse-Project-ID in the .toc; CurseForge upload will be skipped'
+}
 
-# --- consistency checks -------------------------------------------------------
+# --- version and interface consistency ----------------------------------------
 
 # Every place the version is written out, per the release steps in
 # docs/development.md. The .toc is the single source of truth.
 $versionSites = @(
-    @{ Path = $coreLuaPath;                              Pattern = "^--\s*Forever Window Mover\s+$([regex]::Escape($version))\s*$"; What = 'header comment' }
-    @{ Path = $coreLuaPath;                              Pattern = "addon\.version\s*=\s*""$([regex]::Escape($version))"""      ; What = 'addon.version' }
-    @{ Path = (Join-Path $repoRoot 'README.md');         Pattern = "^#\s*$addonName\s+$([regex]::Escape($version))\s*$"        ; What = 'title' }
-    @{ Path = (Join-Path $addonDirectory 'README.txt');  Pattern = "(?i)^FOREVER WINDOW MOVER\s+$([regex]::Escape($version))\s*$"; What = 'title' }
-    @{ Path = (Join-Path $repoRoot 'CHANGELOG.md');      Pattern = "^##\s*$([regex]::Escape($version))\s*$"                    ; What = 'release section' }
+    @{ Path = $meta.CoreLuaPath;                 Pattern = "^--\s*Forever Window Mover\s+$([regex]::Escape($version))\s*$"; What = 'header comment' }
+    @{ Path = $meta.CoreLuaPath;                 Pattern = "addon\.version\s*=\s*""$([regex]::Escape($version))"""         ; What = 'addon.version' }
+    @{ Path = (Join-Path $repoRoot 'README.md'); Pattern = "^#\s*$addonName\s+$([regex]::Escape($version))\s*$"            ; What = 'title' }
+    @{ Path = (Join-Path $repoRoot 'CHANGELOG.md'); Pattern = "^##\s*$([regex]::Escape($version))\s*$"                     ; What = 'release section' }
 )
 foreach ($site in $versionSites) {
     $text = Get-TextOrNull $site.Path
-    $relative = $site.Path.Substring($repoRoot.Length).TrimStart('\', '/')
     if ($null -eq $text) {
-        Add-Problem "$relative is missing."
+        Add-Problem "$(Get-Relative $site.Path) is missing."
         continue
     }
     if ($text -notmatch "(?m)$($site.Pattern)") {
-        Add-Problem "$relative $($site.What) does not state version $version."
+        Add-Problem "$(Get-Relative $site.Path) $($site.What) does not state version $version."
     }
 }
 
 # The Interface number is quoted in the user-facing text as well.
-$interfaceSites = @(
-    (Join-Path $repoRoot 'README.md'),
-    (Join-Path $addonDirectory 'README.txt'),
-    (Join-Path $repoRoot 'docs\README.md')
-)
-foreach ($path in $interfaceSites) {
+foreach ($path in @((Join-Path $repoRoot 'README.md'), (Join-Path $repoRoot 'docs\README.md'))) {
     $text = Get-TextOrNull $path
-    $relative = $path.Substring($repoRoot.Length).TrimStart('\', '/')
     if ($null -eq $text) {
-        Add-Problem "$relative is missing."
+        Add-Problem "$(Get-Relative $path) is missing."
         continue
     }
     if ($text -notmatch [regex]::Escape($interface)) {
-        Add-Problem "$relative does not mention Interface $interface."
+        Add-Problem "$(Get-Relative $path) does not mention Interface $interface."
     }
 }
 
-# Every Lua file the .toc loads must exist, and vice versa.
-$tocLuaFiles = $tocLines | Where-Object { $_ -match '\.lua\s*$' -and $_ -notmatch '^\s*#' } | ForEach-Object { $_.Trim() }
+# --- .toc and .lua agreement --------------------------------------------------
+
+$tocLuaFiles = @($meta.TocLines | Where-Object { $_ -match '\.lua\s*$' -and $_ -notmatch '^\s*#' } | ForEach-Object { $_.Trim() })
 foreach ($file in $tocLuaFiles) {
-    if (-not (Test-Path -LiteralPath (Join-Path $addonDirectory $file))) {
+    if (-not (Test-Path -LiteralPath (Join-Path $repoRoot $file))) {
         Add-Problem "$addonName.toc loads $file, which does not exist."
     }
 }
-Get-ChildItem -LiteralPath $addonDirectory -Filter '*.lua' -File | ForEach-Object {
+Get-ChildItem -LiteralPath $repoRoot -Filter '*.lua' -File | ForEach-Object {
     if ($tocLuaFiles -notcontains $_.Name) {
-        Add-Problem "$($_.Name) is in the addon folder but not listed in $addonName.toc."
+        Add-Problem "$($_.Name) is at the repository root but not listed in $addonName.toc."
+    }
+}
+
+# --- packaging metadata -------------------------------------------------------
+
+# package-as decides the folder name inside the zip, which has to match the
+# addon folder name the .toc and IconTexture path assume.
+$packageAs = Get-FwmPkgmetaField -RepoRoot $repoRoot -Field 'package-as'
+if (-not $packageAs) {
+    Add-Problem '.pkgmeta has no package-as; the packager would guess the name from the .toc file name.'
+}
+elseif ($packageAs -ne $addonName) {
+    Add-Problem ".pkgmeta package-as is '$packageAs' but the addon is '$addonName'; the zip folder would not match the IconTexture path."
+}
+
+# Catch an ignore rule that would strip something the addon needs to run.
+$shippable = @(Get-FwmShippableFile -RepoRoot $repoRoot)
+$shippableNames = $shippable | ForEach-Object { $_.Name }
+foreach ($required in @("$addonName.toc") + $tocLuaFiles) {
+    if ($shippableNames -notcontains $required) {
+        Add-Problem "$required would not be packaged; check the ignore list in .pkgmeta."
     }
 }
 
@@ -175,12 +163,11 @@ Get-ChildItem -LiteralPath $addonDirectory -Filter '*.lua' -File | ForEach-Objec
 
 # The client reads BLP and uncompressed TGA only, so a PNG IconTexture renders
 # as nothing. Keep the generated TGA current with the source art.
-$iconScript = Join-Path $PSScriptRoot 'Convert-IconToTga.ps1'
-$iconSource = Join-Path $addonDirectory 'Ornate-Golden-UI-Mover-Icon.png'
-$iconTarget = Join-Path $addonDirectory 'Ornate-Golden-UI-Mover-Icon.tga'
+$iconSource = Join-Path $repoRoot 'Ornate-Golden-UI-Mover-Icon.png'
+$iconTarget = Join-Path $repoRoot 'Ornate-Golden-UI-Mover-Icon.tga'
 
-if ($iconTexture -and $iconTexture -match '\.png\s*$') {
-    Add-Problem "## IconTexture points at a .png; the client cannot load PNG textures. Use the generated .tga (or a .blp)."
+if ($meta.IconTexture -and $meta.IconTexture -match '\.png\s*$') {
+    Add-Problem '## IconTexture points at a .png; the client cannot load PNG textures. Use the generated .tga (or a .blp).'
 }
 if (Test-Path -LiteralPath $iconSource) {
     $iconStale = (-not (Test-Path -LiteralPath $iconTarget)) -or
@@ -190,15 +177,15 @@ if (Test-Path -LiteralPath $iconSource) {
             Add-Problem 'Ornate-Golden-UI-Mover-Icon.tga is missing or older than the source PNG; run tools\build.ps1.'
         }
         else {
-            & $iconScript | Out-Null
+            & (Join-Path $PSScriptRoot 'Convert-IconToTga.ps1') | Out-Null
             Add-Change 'converted Ornate-Golden-UI-Mover-Icon.png -> .tga'
         }
     }
 }
 
-if ($iconTexture) {
+if ($meta.IconTexture) {
     # Resolve the TOC path (Interface\AddOns\<addon>\<file>) back to disk.
-    $iconLeaf = Split-Path -Leaf ($iconTexture -replace '\\', '/')
+    $iconLeaf = Split-Path -Leaf ($meta.IconTexture -replace '\\', '/')
     $iconCandidates = if ([System.IO.Path]::GetExtension($iconLeaf)) {
         @($iconLeaf)
     }
@@ -206,43 +193,18 @@ if ($iconTexture) {
         # An extensionless TOC path lets the client pick either format.
         @("$iconLeaf.tga", "$iconLeaf.blp")
     }
-    $found = $iconCandidates | Where-Object { Test-Path -LiteralPath (Join-Path $addonDirectory $_) }
-    if (-not $found -and -not $Check) {
-        Add-Problem "## IconTexture references $iconLeaf, which is not in the addon folder."
+    # @() matters: a single match would otherwise be a bare string, and
+    # indexing a string gives you its first character.
+    $found = @($iconCandidates | Where-Object { Test-Path -LiteralPath (Join-Path $repoRoot $_) })
+    if ($found.Count -eq 0 -and -not $Check) {
+        Add-Problem "## IconTexture references $iconLeaf, which is not in the repository root."
+    }
+    # An icon that exists but is excluded from the package is worse than no
+    # icon: it works locally and silently breaks for everyone else.
+    if ($found.Count -gt 0 -and ($shippableNames -notcontains $found[0])) {
+        Add-Problem "$($found[0]) would not be packaged; check the ignore list in .pkgmeta."
     }
 }
-
-# --- generated in-package copies ----------------------------------------------
-
-# CHANGELOG: identical body, different header/footer. The repo copy links to
-# docs/, which is not shipped, so the package copy spells out the URL instead.
-$rootChangelog = (Get-Content -LiteralPath (Join-Path $repoRoot 'CHANGELOG.md') -Raw) -replace "`r`n", "`n"
-$changelogLines = [System.Collections.Generic.List[string]]($rootChangelog -split "`n")
-
-# Drop the repo-only footer links and any trailing blank lines.
-while ($changelogLines.Count -gt 0 -and
-      ($changelogLines[$changelogLines.Count - 1].Trim() -eq '' -or
-       $changelogLines[$changelogLines.Count - 1] -match '^\[Source and issues\]')) {
-    $changelogLines.RemoveAt($changelogLines.Count - 1)
-}
-
-# Insert the attribution line after the intro paragraph.
-$introIndex = -1
-for ($i = 0; $i -lt $changelogLines.Count; $i++) {
-    if ($changelogLines[$i] -match '^All notable changes') { $introIndex = $i; break }
-}
-if ($introIndex -lt 0) {
-    Add-Problem 'CHANGELOG.md has no "All notable changes" intro line; cannot generate the in-package copy.'
-}
-else {
-    $middot = [char]0x00B7
-    $changelogLines.Insert($introIndex + 1, '')
-    $changelogLines.Insert($introIndex + 2, "Author: $author $middot Source / issues: $website")
-    Set-GeneratedFile (Join-Path $addonDirectory 'CHANGELOG.md') (($changelogLines -join "`n") + "`n")
-}
-
-# LICENSE: verbatim.
-Set-GeneratedFile (Join-Path $addonDirectory 'LICENSE') (Get-Content -LiteralPath (Join-Path $repoRoot 'LICENSE') -Raw)
 
 # --- report -------------------------------------------------------------------
 
@@ -255,10 +217,9 @@ if ($problems.Count -gt 0) {
     exit 1
 }
 
-if ($Check) {
-    Write-Host '  in-package copies and version strings are in sync'
-    exit 0
-}
+Write-Host "  validated; $($shippable.Count) files would be packaged"
+
+if ($Check) { exit 0 }
 
 # --- package ------------------------------------------------------------------
 
@@ -270,7 +231,7 @@ $staging = Join-Path ([System.IO.Path]::GetTempPath()) ("fwm-build-" + [guid]::N
 $stagedAddon = Join-Path $staging $addonName
 try {
     New-Item -ItemType Directory -Path $stagedAddon -Force | Out-Null
-    Get-FwmShippableFile -AddonDirectory $addonDirectory | ForEach-Object {
+    $shippable | ForEach-Object {
         Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $stagedAddon $_.Name)
     }
 
@@ -281,13 +242,13 @@ try {
     if (Test-Path -LiteralPath $zipPath) { Remove-Item -LiteralPath $zipPath -Force }
 
     # includeBaseDirectory: the zip must contain the ForeverWindowMover folder
-    # itself so it drops straight into Interface\AddOns\.
+    # itself so it drops straight into Interface\AddOns\, which is also what
+    # the packager produces from package-as.
     [System.IO.Compression.ZipFile]::CreateFromDirectory(
         $stagedAddon, $zipPath, [System.IO.Compression.CompressionLevel]::Optimal, $true)
 
-    $shipped = Get-ChildItem -LiteralPath $stagedAddon -File | Sort-Object Name
-    Write-Host "  packaged $($shipped.Count) files -> $($zipPath.Substring($repoRoot.Length).TrimStart('\'))"
-    foreach ($file in $shipped) { Write-Host "      $($file.Name)" }
+    Write-Host "  packaged $($shippable.Count) files -> $(Get-Relative $zipPath)"
+    foreach ($file in $shippable) { Write-Host "      $($file.Name)" }
 }
 finally {
     if (Test-Path -LiteralPath $staging) { Remove-Item -LiteralPath $staging -Recurse -Force }

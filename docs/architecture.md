@@ -10,7 +10,9 @@ Load order is set by `ForeverWindowMover.toc`:
 | `Options.lua` | Blizzard **Options > AddOns** canvas panel. Defines `addon.CreateOptions`, `addon.OpenOptions`, and `addon.RefreshOptions`. Reads and calls core functions only. |
 | `TitanBroker.lua` | Optional LibDataBroker 1.1 launcher. Defines `addon.RefreshBroker`. Degrades to a no-op when no LDB is present. |
 
-Non-Lua files in the addon folder: `ForeverWindowMover.toc`, `README.txt`, `CHANGELOG.md`, `LICENSE`, and `Ornate-Golden-UI-Mover-Icon.tga` — the addon-list icon named by `## IconTexture`. The `.tga` is generated from `Ornate-Golden-UI-Mover-Icon.png` by `tools/Convert-IconToTga.ps1`; the client reads BLP and uncompressed TGA only, so a PNG referenced from the `.toc` would render as nothing. The PNG is the source art and is not shipped.
+The three Lua files sit at the **repository root** alongside `ForeverWindowMover.toc`, which is where the BigWigs packager expects them. See [development notes](development.md#repository-layout).
+
+Other files that ship: `README.md`, `CHANGELOG.md`, `LICENSE`, and `Ornate-Golden-UI-Mover-Icon.tga` — the addon-list icon named by `## IconTexture`. The `.tga` is generated from `Ornate-Golden-UI-Mover-Icon.png` by `tools/Convert-IconToTga.ps1`; the client reads BLP and uncompressed TGA only, so a PNG referenced from the `.toc` would render as nothing. The PNG is the source art and is excluded from the package by `.pkgmeta`.
 
 `Options.lua` and `TitanBroker.lua` are intentionally decoupled from dragging: they call into the core, never manipulate frames directly, and the core only calls back into them through soft checks (`if addon.RefreshOptions then ... end`).
 

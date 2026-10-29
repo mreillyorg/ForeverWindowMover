@@ -4,19 +4,19 @@
     functions and variables only and does no work on its own.
 
 .DESCRIPTION
-    build.ps1 and Sync-ToAddOns.ps1 both need the addon name, the list of files
-    that ship, the .toc fields and the metadata in the core Lua file. Keeping
-    those in one place is the same reasoning as generating the in-package
-    CHANGELOG: two hand-maintained copies drift.
+    build.ps1 and Sync-ToAddOns.ps1 both need to know the addon name, which
+    files ship, the .toc fields and the metadata in the core Lua file. Keeping
+    those in one place is the same reasoning as reading the ignore list from
+    .pkgmeta: two hand-maintained copies drift.
+
+    The addon's files live at the repository root, which is where the BigWigs
+    packager looks for <package-as>.toc, so "what ships" is defined by
+    subtraction -- every root file except those .pkgmeta ignores.
 #>
 
 Set-StrictMode -Version Latest
 
-# Files kept in the repository but never shipped: source art the client cannot
-# read, and anything a packaging host would strip anyway. Both the zip and the
-# AddOns sync use this list, so what you test is what you ship.
 $FwmAddonName = 'ForeverWindowMover'
-$FwmPackageExclusions = @('*.png', '*.psd', '*.xcf')
 
 function Get-FwmRepoRoot {
     <#
@@ -25,6 +25,70 @@ function Get-FwmRepoRoot {
     #>
     param([Parameter(Mandatory)][string] $ToolsDirectory)
     return (Resolve-Path -LiteralPath (Join-Path $ToolsDirectory '..')).Path
+}
+
+function Get-FwmPackageIgnore {
+    <#
+    .SYNOPSIS
+        The ignore list from .pkgmeta.
+
+    .DESCRIPTION
+        .pkgmeta is the single source of truth for what does not ship, so the
+        local zip and a CurseForge upload cannot disagree. This reads just the
+        flat "ignore:" sequence rather than pulling in a YAML parser -- that is
+        the only key the local tooling needs, and the file is ours.
+
+        Throws if the key is missing, because silently shipping docs/ and
+        tools/ would be worse than failing.
+    #>
+    param([Parameter(Mandatory)][string] $RepoRoot)
+
+    $pkgmetaPath = Join-Path $RepoRoot '.pkgmeta'
+    if (-not (Test-Path -LiteralPath $pkgmetaPath)) {
+        throw "No .pkgmeta at $pkgmetaPath. It defines what ships; the tooling will not guess."
+    }
+
+    $ignore = [System.Collections.Generic.List[string]]::new()
+    $inIgnore = $false
+    foreach ($line in (Get-Content -LiteralPath $pkgmetaPath)) {
+        # Comments and blank lines never end a block.
+        if ($line -match '^\s*#' -or $line -match '^\s*$') { continue }
+
+        if ($line -match '^ignore\s*:') { $inIgnore = $true; continue }
+        # Any other top-level key ends the ignore block.
+        if ($line -match '^\S') { $inIgnore = $false; continue }
+
+        if ($inIgnore -and $line -match '^\s*-\s*(.+?)\s*$') {
+            # Strip the quotes YAML needs around a leading '*'.
+            $ignore.Add($Matches[1].Trim('"', "'"))
+        }
+    }
+
+    if ($ignore.Count -eq 0) {
+        throw "No 'ignore:' entries found in $pkgmetaPath."
+    }
+    return $ignore.ToArray()
+}
+
+function Get-FwmShippableFile {
+    <#
+    .SYNOPSIS
+        The files that make up a release.
+
+    .DESCRIPTION
+        Root files only. The addon is flat, so no subdirectory ships, and
+        anything matching a .pkgmeta ignore entry or beginning with a period is
+        excluded -- the packager always ignores dot files, so we match that.
+    #>
+    param([Parameter(Mandatory)][string] $RepoRoot)
+
+    $ignore = Get-FwmPackageIgnore -RepoRoot $RepoRoot
+
+    return Get-ChildItem -LiteralPath $RepoRoot -File | Where-Object {
+        $name = $_.Name
+        if ($name.StartsWith('.')) { return $false }
+        -not ($ignore | Where-Object { $name -like $_ })
+    } | Sort-Object Name
 }
 
 function Get-FwmTocField {
@@ -60,11 +124,10 @@ function Get-FwmMetadata {
     #>
     param([Parameter(Mandatory)][string] $RepoRoot)
 
-    $addonDirectory = Join-Path $RepoRoot $FwmAddonName
-    $tocPath = Join-Path $addonDirectory "$FwmAddonName.toc"
-    $coreLuaPath = Join-Path $addonDirectory "$FwmAddonName.lua"
+    $tocPath = Join-Path $RepoRoot "$FwmAddonName.toc"
+    $coreLuaPath = Join-Path $RepoRoot "$FwmAddonName.lua"
 
-    foreach ($required in @($addonDirectory, $tocPath, $coreLuaPath)) {
+    foreach ($required in @($tocPath, $coreLuaPath)) {
         if (-not (Test-Path -LiteralPath $required)) { throw "Required path not found: $required" }
     }
 
@@ -79,31 +142,35 @@ function Get-FwmMetadata {
     return [pscustomobject]@{
         RepoRoot       = $RepoRoot
         AddonName      = $FwmAddonName
-        AddonDirectory = (Resolve-Path -LiteralPath $addonDirectory).Path
         TocPath        = $tocPath
         TocLines       = $tocLines
         CoreLuaPath    = $coreLuaPath
         Version        = $version
         Interface      = $interface
         IconTexture    = Get-FwmTocField -TocLines $tocLines -Field 'IconTexture'
+        CurseProjectId = Get-FwmTocField -TocLines $tocLines -Field 'X-Curse-Project-ID'
+        WowiId         = Get-FwmTocField -TocLines $tocLines -Field 'X-WoWI-ID'
+        WagoId         = Get-FwmTocField -TocLines $tocLines -Field 'X-Wago-ID'
         Author         = if ($coreLua -match 'addon\.author\s*=\s*"([^"]+)"') { $Matches[1] } else { $null }
         Website        = if ($coreLua -match 'addon\.website\s*=\s*"([^"]+)"') { $Matches[1] } else { $null }
-        Exclusions     = $FwmPackageExclusions
     }
 }
 
-function Get-FwmShippableFile {
+function Get-FwmPkgmetaField {
     <#
     .SYNOPSIS
-        The files that make up a release: everything in the addon folder except
-        the package exclusions.
+        Reads a single top-level scalar key from .pkgmeta, e.g. package-as.
     #>
-    param([Parameter(Mandatory)][string] $AddonDirectory)
-
-    return Get-ChildItem -LiteralPath $AddonDirectory -File | Where-Object {
-        $name = $_.Name
-        -not ($FwmPackageExclusions | Where-Object { $name -like $_ })
-    } | Sort-Object Name
+    param(
+        [Parameter(Mandatory)][string] $RepoRoot,
+        [Parameter(Mandatory)][string] $Field
+    )
+    $pkgmetaPath = Join-Path $RepoRoot '.pkgmeta'
+    if (-not (Test-Path -LiteralPath $pkgmetaPath)) { return $null }
+    foreach ($line in (Get-Content -LiteralPath $pkgmetaPath)) {
+        if ($line -match "^$([regex]::Escape($Field))\s*:\s*(.+?)\s*$") { return $Matches[1].Trim('"', "'") }
+    }
+    return $null
 }
 
 function Find-FwmAddOnsDirectory {

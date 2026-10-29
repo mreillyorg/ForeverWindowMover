@@ -1,47 +1,44 @@
 <#
 .SYNOPSIS
-    Syncs the ForeverWindowMover folder into Interface\AddOns for local testing.
+    Installs the addon into Interface\AddOns for local testing.
 
 .DESCRIPTION
-    Mirrors exactly the files that ship -- the package exclusions in
-    tools/Common.ps1 apply here too -- so what you test in the client is what
-    goes in the zip. Stale files left over from an older install are removed.
+    Copies the files that ship -- the ignore list in .pkgmeta decides which --
+    into <AddOns>\ForeverWindowMover. Because the shipping list comes from the
+    same place the BigWigs packager reads, what you load in the client is what
+    CurseForge will serve. Files left behind by an older install are deleted
+    rather than allowed to shadow the new ones.
 
-    By default it runs tools/build.ps1 -SkipPackage first, so the generated
-    in-package CHANGELOG, LICENSE and icon TGA are current before the copy.
+    Unless you pass -SkipBuild it runs tools/build.ps1 -Check first, so a
+    version mismatch or a stale icon stops the sync instead of being tested.
 
     The AddOns directory is found automatically: $env:WOW_ADDONS_PATH, then by
     walking up from the repository (which covers a checkout inside the WoW
     tree), then the default install locations. Pass -AddOnsPath to override. If
-    more than one candidate turns up, the script stops and lists them instead
-    of guessing a flavour.
+    more than one candidate turns up, the script stops and lists them rather
+    than guessing a flavour.
 
     Only <AddOns>\ForeverWindowMover is ever touched, and the path is checked
     against that shape before anything is written or deleted.
 
-.PARAMETER Mode
-    Copy (default)  Mirror the shipping files into the AddOns folder.
-    Junction        Point the AddOns folder at the repository instead, so edits
-                    need no re-sync. The client then also sees the files that
-                    do not ship, including the multi-megabyte source PNG.
-                    Replacing an existing real folder needs -Force.
+    There is deliberately no junction mode. The addon's files now live at the
+    repository root, so linking the repo into Interface\AddOns would put .git,
+    docs/ and tools/ inside the game install. Use -Watch instead; it copies on
+    every save.
 
 .PARAMETER Watch
-    Re-sync whenever a file in the addon folder changes. Runs until Ctrl+C, so
-    start it in your own terminal rather than from an agent or a build step.
+    Re-sync whenever a file at the repository root changes. Runs until Ctrl+C,
+    so start it in your own terminal rather than from an agent or a build step.
 
 .PARAMETER Remove
-    Delete the synced folder or junction and exit.
+    Delete the installed folder and exit.
 
 .PARAMETER SkipBuild
-    Do not run build.ps1 first. Faster, but the generated files may be stale.
-
-.PARAMETER Force
-    Allow replacing a real directory with a junction.
+    Do not validate first. Faster, but a stale icon or version will be synced.
 
 .EXAMPLE
     .\tools\Sync-ToAddOns.ps1
-    Regenerate, then mirror into the detected AddOns directory.
+    Validate, then mirror the shipping files into Interface\AddOns.
 
 .EXAMPLE
     .\tools\Sync-ToAddOns.ps1 -WhatIf
@@ -50,20 +47,13 @@
 .EXAMPLE
     .\tools\Sync-ToAddOns.ps1 -Watch -SkipBuild
     Copy on every save while you iterate. /reload in the client to pick changes up.
-
-.EXAMPLE
-    .\tools\Sync-ToAddOns.ps1 -Mode Junction -Force
-    Replace the installed folder with a junction to the repository.
 #>
 [CmdletBinding(SupportsShouldProcess)]
 param(
     [string] $AddOnsPath,
-    [ValidateSet('Copy', 'Junction')]
-    [string] $Mode = 'Copy',
     [switch] $Watch,
     [switch] $Remove,
-    [switch] $SkipBuild,
-    [switch] $Force
+    [switch] $SkipBuild
 )
 
 Set-StrictMode -Version Latest
@@ -104,7 +94,7 @@ function Test-TargetIsJunction {
 }
 
 Write-Host "$($meta.AddonName) $($meta.Version) (Interface $($meta.Interface))"
-Write-Host "  source  $($meta.AddonDirectory)"
+Write-Host "  source  $repoRoot"
 Write-Host "  target  $target"
 
 # --- remove -------------------------------------------------------------------
@@ -114,12 +104,12 @@ if ($Remove) {
         Write-Host '  nothing installed'
         exit 0
     }
-    $what = if (Test-TargetIsJunction) { 'junction' } else { 'folder' }
+    $isJunction = Test-TargetIsJunction
+    $what = if ($isJunction) { 'junction' } else { 'folder' }
     if ($PSCmdlet.ShouldProcess($target, "Remove the installed $what")) {
-        # Remove-Item on a junction deletes the link, not the contents, but be
-        # explicit about it so a future refactor cannot quietly recurse into
-        # the repository.
-        if ($what -eq 'junction') {
+        if ($isJunction) {
+            # Deletes the link only. Be explicit so a future refactor cannot
+            # quietly start recursing into whatever it points at.
             [System.IO.Directory]::Delete($target)
         }
         else {
@@ -130,57 +120,29 @@ if ($Remove) {
     exit 0
 }
 
-# --- regenerate ---------------------------------------------------------------
+# --- validate -----------------------------------------------------------------
 
 if (-not $SkipBuild) {
-    Write-Host '  --- build.ps1 -SkipPackage ---'
+    Write-Host '  --- build.ps1 -Check ---'
     $global:LASTEXITCODE = 0
-    & (Join-Path $PSScriptRoot 'build.ps1') -SkipPackage
+    & (Join-Path $PSScriptRoot 'build.ps1') -Check
     if ($LASTEXITCODE -ne 0) {
-        throw 'build.ps1 reported problems; nothing was synced. Fix them, or re-run with -SkipBuild.'
+        throw 'build.ps1 -Check reported problems; nothing was synced. Fix them, or re-run with -SkipBuild.'
     }
-    Write-Host '  ------------------------------'
+    Write-Host '  -----------------------'
 }
 
 if (Test-FwmClientRunning) {
     Write-Warning 'A WoW client is running. Lua changes need /reload; .toc and metadata changes need a full client restart.'
 }
 
-# --- junction mode ------------------------------------------------------------
-
-if ($Mode -eq 'Junction') {
-    if (Test-TargetIsJunction) {
-        $existing = (Get-Item -LiteralPath $target -Force).LinkTarget
-        if ($existing -ieq $meta.AddonDirectory) {
-            Write-Host '  junction already points at the repository; nothing to do'
-            exit 0
-        }
-        if ($PSCmdlet.ShouldProcess($target, "Repoint the junction at $($meta.AddonDirectory)")) {
-            [System.IO.Directory]::Delete($target)
-        }
-    }
-    elseif (Test-Path -LiteralPath $target) {
-        if (-not $Force) {
-            throw "$target is a real directory. Re-run with -Force to replace it with a junction, or use -Mode Copy."
-        }
-        if ($PSCmdlet.ShouldProcess($target, 'Delete the installed folder and replace it with a junction')) {
-            Remove-Item -LiteralPath $target -Recurse -Force
-        }
-    }
-
-    if ($PSCmdlet.ShouldProcess($target, "Create a junction to $($meta.AddonDirectory)")) {
-        New-Item -ItemType Junction -Path $target -Target $meta.AddonDirectory | Out-Null
-        Write-Host "  junction -> $($meta.AddonDirectory)"
-        Write-Host '  note: the client now also sees files that do not ship, including the source PNG'
-    }
-    exit 0
-}
-
-# --- copy mode ----------------------------------------------------------------
-
+# A junction left over from an older version of this script would make the copy
+# write into the repository itself.
 if (Test-TargetIsJunction) {
-    throw "$target is a junction. Edits are already live; use -Mode Junction, or -Remove first to switch to Copy."
+    throw "$target is a junction, probably from an earlier version of this script. Run with -Remove first; junction mode is no longer supported now that the addon lives at the repository root."
 }
+
+# --- sync ---------------------------------------------------------------------
 
 # Mirrors the shipping files and deletes anything else in the target. Returns a
 # summary so -Watch can print one line per pass.
@@ -193,8 +155,8 @@ function Sync-Once {
         }
     }
 
-    $sourceFiles = @(Get-FwmShippableFile -AddonDirectory $meta.AddonDirectory)
-    if ($sourceFiles.Count -eq 0) { throw "No files to sync from $($meta.AddonDirectory)" }
+    $sourceFiles = @(Get-FwmShippableFile -RepoRoot $repoRoot)
+    if ($sourceFiles.Count -eq 0) { throw "No files to sync from $repoRoot" }
 
     foreach ($file in $sourceFiles) {
         $destination = Join-Path $target $file.Name
@@ -223,13 +185,14 @@ function Sync-Once {
         }
     }
 
-    # Stale cleanup: files a previous version installed, and anything the
-    # exclusion list now keeps out. Subdirectories are removed too -- the addon
-    # is flat, so one being there means it is left over.
     if (-not (Test-Path -LiteralPath $target)) {
         # Only reachable under -WhatIf, where the folder was never created.
         return [pscustomobject]@{ Added = $added; Updated = $updated; Removed = $removed; Unchanged = $same }
     }
+
+    # Stale cleanup: files a previous version installed, and anything .pkgmeta
+    # now ignores. Subdirectories are removed too -- the addon is flat, so one
+    # being there means it is left over.
     $expected = $sourceFiles | ForEach-Object { $_.Name }
     foreach ($entry in Get-ChildItem -LiteralPath $target -Force) {
         if ($entry.PSIsContainer -or $expected -notcontains $entry.Name) {
@@ -253,11 +216,13 @@ if (-not $Watch) { exit 0 }
 # --- watch mode ---------------------------------------------------------------
 
 Write-Host ''
-Write-Host "Watching $($meta.AddonDirectory) -- Ctrl+C to stop."
+Write-Host "Watching $repoRoot -- Ctrl+C to stop."
 Write-Host 'Remember to /reload in the client after each sync.'
 
 $watcher = New-Object System.IO.FileSystemWatcher
-$watcher.Path = $meta.AddonDirectory
+$watcher.Path = $repoRoot
+# Root level only: that is where the addon's files are, and it keeps writes to
+# dist/, docs/ and tools/ from triggering a sync.
 $watcher.IncludeSubdirectories = $false
 $watcher.NotifyFilter = [System.IO.NotifyFilters]::LastWrite -bor
     [System.IO.NotifyFilters]::FileName -bor

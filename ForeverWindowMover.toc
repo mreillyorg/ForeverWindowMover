@@ -4,6 +4,7 @@
 ## Version: 0.3.3
 ## Author: Michael Reilly
 ## X-Website: https://github.com/mreillyorg/ForeverWindowMover
+## X-Curse-Project-ID: 1737408
 ## IconTexture: Interface\AddOns\ForeverWindowMover\Ornate-Golden-UI-Mover-Icon.tga
 ## SavedVariables: ForeverWindowMoverDB
 ## OptionalDeps: Titan

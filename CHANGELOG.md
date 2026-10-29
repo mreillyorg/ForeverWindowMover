@@ -2,26 +2,36 @@
 
 All notable changes to **Forever Window Mover**. Every release so far targets WoW: Forever 1.60.1 (Interface `16001`).
 
+Author: Michael Reilly · Source / issues: https://github.com/mreillyorg/ForeverWindowMover
+
 Release dates are not recorded in the repository history, so versions are listed newest-first without dates.
 
 ## 0.3.3
 
-A repository and tooling release. **No Lua in the addon changed**, so in-game behaviour, the group list and the `ForeverWindowMoverDB` format are identical to 0.3.2.
+A repository, packaging and tooling release. **No Lua in the addon changed**, so in-game behaviour, the group list and the `ForeverWindowMoverDB` format are identical to 0.3.2.
 
 Added
 
-- `tools/Sync-ToAddOns.ps1`: installs the addon into `Interface\AddOns` for local testing. Mirrors only the files that ship, so the client loads what the zip would contain, and deletes files left behind by an older install instead of letting them shadow the new ones. Finds the AddOns directory automatically — `$env:WOW_ADDONS_PATH`, then by walking up from the repository, then the default install locations — and stops rather than guessing if more than one candidate turns up. Regenerates first unless `-SkipBuild`. Supports `-Watch` to re-sync on save, `-Mode Junction` to link the repository folder instead of copying, `-Remove` to uninstall, and `-WhatIf` for a dry run.
-- `tools/Common.ps1`: the addon name, package exclusion list, `.toc` parsing, version/author metadata reads, shippable-file selection, AddOns discovery and target-path guard, shared by `build.ps1` and `Sync-ToAddOns.ps1`. The exclusion list now has one definition rather than one per script, which is the same reasoning behind generating the in-package changelog.
+- **CurseForge publishing.** `## X-Curse-Project-ID: 1737408` in the `.toc`, a `.pkgmeta`, and `.github/workflows/release.yml` running the [BigWigs packager](https://github.com/BigWigsMods/packager). Pushing an annotated `v*` tag now validates the release, builds the zip, creates a GitHub release and uploads to CurseForge. Interface `16001` resolves to the Forever (`camelot`) game type, which the packager supports natively.
+- `.pkgmeta` is the single source of truth for what ships. `tools/build.ps1` and `tools/Sync-ToAddOns.ps1` read its `ignore` list instead of keeping their own copy, so a local zip, a local install and a CurseForge upload cannot contain different files.
+- `tools/build.ps1` gained checks the packager does not make: that `package-as` matches the addon name, and that no ignore rule would strip a `.lua` file, the `.toc`, or the icon out of the package. An icon that works locally and is missing from the zip is the kind of thing nobody notices until a user reports it.
+- `tools/Sync-ToAddOns.ps1`: installs the addon into `Interface\AddOns` for local testing. Mirrors only the files that ship, so the client loads what the zip would contain, and deletes files left behind by an older install instead of letting them shadow the new ones. Finds the AddOns directory automatically — `$env:WOW_ADDONS_PATH`, then by walking up from the repository, then the default install locations — and stops rather than guessing if more than one candidate turns up. Validates first unless `-SkipBuild`. Supports `-Watch` to re-sync on save, `-Remove` to uninstall, and `-WhatIf` for a dry run.
+- `tools/Common.ps1`: the addon name, `.toc` and `.pkgmeta` parsing, version/author metadata reads, shippable-file selection, AddOns discovery and target-path guard, shared by `build.ps1` and `Sync-ToAddOns.ps1`.
+- Both scripts validate their target before writing or deleting: the folder must be named `ForeverWindowMover` and its parent must be an `AddOns` directory. They write into a game install, so a mistyped `-AddOnsPath` fails instead of pointing a recursive delete somewhere unfortunate.
 
 Changed
 
-- `tools/build.ps1` reads its metadata through `Common.ps1` instead of parsing the `.toc` itself. Behaviour and output are unchanged.
-- The sync and packaging scripts validate their target before writing or deleting: the folder must be named `ForeverWindowMover` and its parent must be an `AddOns` directory. These scripts write into a game install, so a mistyped `-AddOnsPath` fails instead of pointing a recursive delete somewhere unfortunate.
+- **The addon's files moved from `ForeverWindowMover/` to the repository root.** This is the layout the packager requires: it looks for `<package-as>.toc` in the top directory, and its `-t` switch cannot be pointed at a subdirectory because the checkout's `.git` has to be there too.
+- Removed the generated in-package `CHANGELOG.md` and `LICENSE`. They only existed because the addon was a subfolder; with one copy of each at the root, `build.ps1` no longer generates or drift-checks anything, which removed about a third of it.
+- `README.txt` is gone. It duplicated `README.md` in plain text for distribution sites, and `README.md` now ships in the zip. One readme, one version string to bump.
+- Links in the shipped `README.md` and `CHANGELOG.md` point at absolute GitHub URLs, since `docs/` is not in the package and relative links would be dead.
+- `Sync-ToAddOns.ps1` has no junction mode. With the addon at the repository root, linking it into `Interface\AddOns` would put `.git`, `docs/` and `tools/` inside the game install. `-Watch` covers the same iteration case. An existing junction is detected and refused rather than written through.
+- `tools/build.ps1` reads its metadata through `Common.ps1` rather than parsing the `.toc` itself.
 
 Fixed
 
 - `docs/supported-windows.md` still told you that adding a group meant shifting hardcoded offsets inside a fixed 640x550 panel. That stopped being true in 0.3.2, when the options panel moved to a layout cursor. It now documents the real remaining constraint: the derived height grows 34px per row and a settings canvas does not scroll.
-- `docs/development.md` recommended creating the AddOns junction by hand; it now points at `Sync-ToAddOns.ps1` and explains when a junction is the wrong choice.
+- `docs/development.md` recommended creating the AddOns junction by hand; it now documents `Sync-ToAddOns.ps1`, the `.pkgmeta` contract and the CurseForge release flow.
 
 ## 0.3.2
 
@@ -127,4 +137,4 @@ Initial prototype.
 - Saved positions re-applied after Blizzard recalculates panel layout (`UpdateUIPanelPositions` hook).
 - Slash commands: `/fwm`, `/windowmover`, with `reset`, `reset vendor`, and `reset trade`.
 
-[Source and issues](https://github.com/mreillyorg/ForeverWindowMover) · [documentation](docs/README.md)
+[Source and issues](https://github.com/mreillyorg/ForeverWindowMover) · [documentation](https://github.com/mreillyorg/ForeverWindowMover/blob/main/docs/README.md)

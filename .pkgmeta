@@ -1,0 +1,35 @@
+# BigWigs packager configuration.
+# https://github.com/BigWigsMods/packager/wiki/Preparing-the-PackageMeta-File
+#
+# This file is the single source of truth for what ships. tools/build.ps1 and
+# tools/Sync-ToAddOns.ps1 read the ignore list below rather than keeping their
+# own copy, so a local zip and a CurseForge upload always contain the same
+# files. Add a new repo-only file here and the local tooling respects it too.
+#
+# The addon's own files live at the repository root because that is where the
+# packager looks for <package-as>.toc. Everything else at the root is either
+# shipped documentation or listed as ignored.
+
+package-as: ForeverWindowMover
+
+ignore:
+  # Repository documentation. The shipped README.md links to these on GitHub
+  # with absolute URLs, so none of it needs to be in the zip.
+  - docs
+  # Build and local-install scripts; no use to an end user.
+  - tools
+  # Source art. The client cannot read PNG, so only the generated .tga is of
+  # any use in-game, and this file is larger than the rest of the addon
+  # combined. See tools/Convert-IconToTga.ps1.
+  - "*.png"
+  # Local build output.
+  - dist
+
+# The changelog is written by hand and kept in release order. Without this the
+# packager would replace it with a list of commits since the previous tag.
+manual-changelog:
+  filename: CHANGELOG.md
+  markup-type: markdown
+
+# Files beginning with a period (.pkgmeta, .gitignore, .github, ...) are always
+# ignored by the packager and do not need listing above.

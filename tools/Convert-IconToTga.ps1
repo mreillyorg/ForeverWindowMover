@@ -10,7 +10,7 @@
     32-bit uncompressed TGA (bottom-left origin, 8 alpha bits) next to it.
 
     The PNG stays in the repository as the source of truth for the art and is
-    excluded from the shipped package by tools/build.ps1.
+    excluded from the shipped package by the "*.png" ignore rule in .pkgmeta.
 
 .PARAMETER Size
     Edge length of the generated square texture. Must be a power of two; 64 is
@@ -24,8 +24,8 @@
 #>
 [CmdletBinding()]
 param(
-    [string] $SourcePath = (Join-Path $PSScriptRoot '..\ForeverWindowMover\Ornate-Golden-UI-Mover-Icon.png'),
-    [string] $DestinationPath = (Join-Path $PSScriptRoot '..\ForeverWindowMover\Ornate-Golden-UI-Mover-Icon.tga'),
+    [string] $SourcePath = (Join-Path $PSScriptRoot '..\Ornate-Golden-UI-Mover-Icon.png'),
+    [string] $DestinationPath = (Join-Path $PSScriptRoot '..\Ornate-Golden-UI-Mover-Icon.tga'),
     [int] $Size = 64,
     [switch] $Force
 )

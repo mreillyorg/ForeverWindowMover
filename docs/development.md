@@ -2,29 +2,33 @@
 
 ## Repository layout
 
+The addon's files live at the **repository root**. That is not a stylistic choice: the BigWigs packager looks for `<package-as>.toc` in the top directory, and its `-t` switch cannot be aimed at a subdirectory because the checkout's `.git` has to be in the same place. See [CurseForge publishing](#curseforge-publishing).
+
 ```
 ForeverWindowMover-repo/
-├── ForeverWindowMover/        <- the shippable addon folder
-│   ├── ForeverWindowMover.toc
-│   ├── ForeverWindowMover.lua
-│   ├── Options.lua
-│   ├── TitanBroker.lua
-│   ├── Ornate-Golden-UI-Mover-Icon.png   <- source art, not shipped
-│   ├── Ornate-Golden-UI-Mover-Icon.tga   <- generated addon-list icon
-│   ├── README.txt             <- in-package notes for distribution sites
-│   ├── CHANGELOG.md           <- generated from CHANGELOG.md
-│   └── LICENSE                <- generated from LICENSE
-├── docs/                      <- this documentation
-├── tools/
-│   ├── Common.ps1             <- shared helpers, dot-sourced by the others
-│   ├── build.ps1              <- generate in-package copies, check, package
-│   ├── Sync-ToAddOns.ps1      <- install into Interface\AddOns for testing
-│   └── Convert-IconToTga.ps1  <- PNG source art -> client-readable TGA
-├── dist/                      <- build output, git-ignored
-├── README.md
-├── CHANGELOG.md               <- repo-level release history
-└── LICENSE
+├── ForeverWindowMover.toc      <- the addon itself, at the root
+├── ForeverWindowMover.lua
+├── Options.lua
+├── TitanBroker.lua
+├── Ornate-Golden-UI-Mover-Icon.tga   <- generated addon-list icon, ships
+├── Ornate-Golden-UI-Mover-Icon.png   <- source art, does NOT ship
+├── README.md                   <- ships
+├── CHANGELOG.md                <- ships, and is the packager's release notes
+├── LICENSE                     <- ships
+├── .pkgmeta                    <- defines what ships; read by tools/ too
+├── .github/workflows/
+│   └── release.yml             <- tag -> validate -> package -> CurseForge
+├── docs/                       <- this documentation, does not ship
+├── tools/                      <- does not ship
+│   ├── Common.ps1              <- shared helpers, dot-sourced by the others
+│   ├── build.ps1               <- validate, and build a local zip
+│   ├── Sync-ToAddOns.ps1       <- install into Interface\AddOns for testing
+│   └── Convert-IconToTga.ps1   <- PNG source art -> client-readable TGA
+├── dist/                       <- local build output, git-ignored
+└── .release/                   <- packager working directory, git-ignored
 ```
+
+Everything at the root either ships or is listed in `.pkgmeta`'s `ignore`. There is no third category, and `build.ps1` will tell you if a new file falls between the two.
 
 There is no package manager and no test harness — the client is the only runtime. The two scripts worth knowing are `tools/Sync-ToAddOns.ps1` for getting the addon in front of the client, and `tools/build.ps1` for releasing it.
 
@@ -39,22 +43,17 @@ There is no package manager and no test harness — the client is the only runti
 
 It mirrors **only the files that ship** — `Get-FwmShippableFile` is the same helper the zip uses — so what you load in the client is what goes in the release, source PNG and all other exclusions left behind. Files from an older install that are no longer part of the addon are deleted, which is how a stale copy gets cleaned up rather than quietly shadowing the new one.
 
-Unless you pass `-SkipBuild`, it runs `build.ps1 -SkipPackage` first, so the generated `CHANGELOG.md`, `LICENSE` and icon TGA are current before the copy. If `build.ps1` reports a problem, nothing is synced.
+Unless you pass `-SkipBuild`, it runs `build.ps1 -Check` first, so a version mismatch or a stale icon stops the sync rather than being tested. If `-Check` reports a problem, nothing is synced.
 
 The AddOns directory is found automatically, in this order: `$env:WOW_ADDONS_PATH`, then by walking up from the repository — which is what resolves it when the checkout lives inside the WoW tree, as it does here — then the default install locations. If more than one candidate turns up, the script stops and lists them rather than guessing a flavour. Use `-AddOnsPath` to be explicit.
 
-### Copy vs junction
+### No junction mode
 
-| | `-Mode Copy` (default) | `-Mode Junction` |
-| --- | --- | --- |
-| What the client loads | A mirror of the shipping files | The repository folder itself |
-| After an edit | Re-run the sync (or leave `-Watch` running) | Nothing, edits are already live |
-| Non-shipping files visible to the client | No | Yes, including the ~2 MB source PNG |
-| Matches what users get | Yes | No |
+Before 0.3.3 the script could link the addon subfolder into `Interface\AddOns` instead of copying. That option is gone: with the addon at the repository root, a junction would put `.git`, `docs/` and `tools/` inside the game install. `-Watch` covers the same "edit and go" case by copying on every save, and a junction left over from the old script is detected and refused rather than written through — run `-Remove` first.
 
-`Copy` is the default because it is the one that catches "works from the repo, broken in the zip" — a missing `.toc` entry, or a file the exclusion list removes. Reach for `Junction` when you are iterating on Lua and tired of re-syncing. Replacing an existing real folder with a junction needs `-Force`, and the two modes refuse to stomp each other: `Copy` will not write through a junction, and `Junction` will not silently delete a real folder.
+Copying is also the mode that catches "works from my tree, broken in the zip", since it installs exactly the files `.pkgmeta` says will ship.
 
-Either way, the client has to be told to re-read the files. **Lua changes need `/reload`; `.toc` and metadata changes need a full client restart.** The script warns when it detects a running client.
+The client still has to be told to re-read the files. **Lua changes need `/reload`; `.toc` and metadata changes need a full client restart.** The script warns when it detects a running client.
 
 ### Safety
 
@@ -62,40 +61,64 @@ The scripts write into a game install, and the sync deletes stale files, so the 
 
 ## tools/Common.ps1
 
-Dot-sourced by the other scripts. It holds the addon name, the package exclusion list, `.toc` field parsing, the version/author metadata reads, the shippable-file selection, AddOns discovery and the target-path guard. Same reasoning as generating the in-package changelog: `build.ps1` and `Sync-ToAddOns.ps1` both need the exclusion list, and two hand-maintained copies would drift.
+Dot-sourced by the other scripts. It holds the addon name, `.toc` and `.pkgmeta` field parsing, the version/author metadata reads, the shippable-file selection, AddOns discovery and the target-path guard.
 
-## Generated files
+`Get-FwmPackageIgnore` reads only the flat `ignore:` sequence out of `.pkgmeta` rather than pulling in a YAML parser — that is the one key the local tooling needs and the file is ours. It throws if the key is missing, because silently shipping `docs/` and `tools/` would be worse than failing.
 
-Two files in the addon folder are generated, not edited:
+## What ships, and who decides
 
-| Generated | From | Transform |
-| --- | --- | --- |
-| `ForeverWindowMover/CHANGELOG.md` | `CHANGELOG.md` | Same body. The author / source line is inserted after the intro paragraph, and the repo-only footer links to `docs/` are dropped, because `docs/` does not ship. |
-| `ForeverWindowMover/LICENSE` | `LICENSE` | Verbatim copy. |
+`.pkgmeta`'s `ignore` list is the **single source of truth**. The BigWigs packager reads it when building the CurseForge upload, and `Get-FwmShippableFile` in `tools/Common.ps1` parses the same list so `build.ps1` and `Sync-ToAddOns.ps1` agree with it. Add a repo-only file to `ignore` and all three stop shipping it; no PowerShell changes.
 
-Editing either copy by hand is how the 0.3.1 changelogs drifted apart. Change `CHANGELOG.md` at the repository root and run `tools\build.ps1`.
+Currently ignored: `docs`, `tools`, `dist`, and `*.png`. Files beginning with a period are always ignored by the packager, so `.pkgmeta`, `.gitignore` and `.github` need no entry — and `Get-FwmShippableFile` skips dot files for the same reason.
 
-`ForeverWindowMover/README.txt` is deliberately **not** generated. It is hand-wrapped plain text for distribution sites with different formatting from `README.md`, so the script only verifies that its version and Interface headers agree with the `.toc`.
+Two guards exist because getting this wrong is quiet rather than loud:
+
+- `build.ps1` fails if an `ignore` rule would strip the `.toc`, any `.lua` file listed in it, or the icon. An addon that works from your working tree and is broken in the zip is the worst failure mode here.
+- `build.ps1` fails if `.pkgmeta`'s `package-as` does not match the addon name, because that name becomes the folder inside the zip and the `## IconTexture` path depends on it.
+
+Before 0.3.3 the addon lived in a subfolder and `CHANGELOG.md` and `LICENSE` were **generated** into it from the root copies, with `build.ps1` checking for drift. The flat layout made that unnecessary: there is one of each now, and they ship directly. `README.txt` went the same way — it duplicated `README.md` as plain text, and `README.md` ships.
+
+## CurseForge publishing
+
+Releases are built and published by the [BigWigs packager](https://github.com/BigWigsMods/packager) from `.github/workflows/release.yml`. The whole flow is driven by pushing a tag:
+
+```powershell
+git tag -a v0.3.4 -m "Forever Window Mover 0.3.4"
+git push origin v0.3.4
+```
+
+The workflow then runs `tools/build.ps1 -Check` as a gate, and only if that passes hands over to `BigWigsMods/packager@v2`, which builds the zip from `.pkgmeta`, creates a GitHub release with `CHANGELOG.md` as the notes, and uploads to CurseForge project **1737408** (from `## X-Curse-Project-ID` in the `.toc`).
+
+Things that will bite you:
+
+- **Tags must be annotated.** `git tag -a`, not `git tag`. The packager uses the tag to determine the version and will not find a lightweight one. `v0.3.1` is lightweight, which is why it predates this workflow.
+- **`CF_API_TOKEN` must be set** as a repository secret, from [CurseForge's API tokens page](https://authors.curseforge.com/#/settings/api-tokens). `GH_API_TOKEN` is wired to the automatic `GITHUB_TOKEN` and needs nothing. `WOWI_API_TOKEN` and `WAGO_API_TOKEN` are optional; unset means that upload is skipped. Note the packager's own wiki still shows the deprecated `CF_API_KEY` and `GITHUB_OAUTH` names.
+- **Keep the version literal in the `.toc`.** The packager can substitute `@project-version@` from the tag, but `build.ps1 -Check` gates on the `.toc` version matching the other sites, so the keyword would fail validation. Bump by hand and let `-Check` police it.
+- Zip naming differs between the two paths: the packager uses the tag, so `v0.3.4` gives `ForeverWindowMover-v0.3.4.zip`, while `build.ps1` produces `ForeverWindowMover-0.3.4.zip` from the `.toc`. Harmless, but don't be surprised.
+- Interface `16001` is the Forever (`camelot`) game type. The packager supports it natively — it appears in the packager's own interface examples and in `release.sh`'s TOC suffix list — so no `-g` override is needed.
+
+`workflow_dispatch` is enabled so you can package a test build from the Actions tab without tagging. Untagged builds are marked alpha and are not uploaded to CurseForge.
 
 ## tools/build.ps1
 
 ```powershell
-.\tools\build.ps1          # regenerate, verify, write dist\ForeverWindowMover-x.y.z.zip
-.\tools\build.ps1 -Check   # verify only; non-zero exit if anything is out of sync
+.\tools\build.ps1          # validate, write dist\ForeverWindowMover-x.y.z.zip
+.\tools\build.ps1 -Check   # validate only; non-zero exit on any problem
 .\tools\build.ps1 -SkipPackage
 ```
 
-What it does, in order:
+It is the validation gate CI runs before the packager, and a local zip builder for checking a package by hand. It checks what the packager does not:
 
-1. Reads `## Version`, `## Interface` and `## IconTexture` from the `.toc`, and `addon.author` / `addon.website` from `ForeverWindowMover.lua` (via `Get-FwmMetadata`), so the attribution line it generates has one source.
-2. Checks the version in the core Lua header comment, `addon.version`, the `README.md` title, the `README.txt` title, and that `CHANGELOG.md` has a `## <version>` section. **The `.toc` is authoritative.**
-3. Checks the Interface number is quoted in `README.md`, `README.txt` and `docs/README.md`.
-4. Checks the `.toc` and the addon folder agree on which `.lua` files exist, and that `## IconTexture` resolves to a file that is actually there and is not a PNG.
-5. Regenerates the icon TGA if it is missing or older than the PNG.
-6. Writes the generated `CHANGELOG.md` and `LICENSE` copies (UTF-8 without BOM, LF endings). Comparison ignores CRLF/LF differences so a Windows checkout is not reported as drift.
-7. Zips a staging copy of the addon folder — excluding `*.png`, `*.psd`, `*.xcf` — into `dist/`, with the `ForeverWindowMover` folder itself at the root of the archive.
+1. Reads `## Version`, `## Interface`, `## IconTexture` and `## X-Curse-Project-ID` from the `.toc`, plus `addon.author` / `addon.website` from `ForeverWindowMover.lua`, via `Get-FwmMetadata`.
+2. Checks the version in the core Lua header comment, `addon.version`, the `README.md` title, and that `CHANGELOG.md` has a `## <version>` section. **The `.toc` is authoritative.**
+3. Checks the Interface number is quoted in `README.md` and `docs/README.md`.
+4. Checks the `.toc` and the root agree on which `.lua` files exist.
+5. Checks `.pkgmeta`'s `package-as` matches the addon name, and that nothing the addon needs is caught by an `ignore` rule.
+6. Checks `## IconTexture` resolves to a file that exists, is not a PNG, and is actually in the package.
+7. Regenerates the icon TGA if it is missing or older than the PNG.
+8. Zips a staging copy into `dist/`, with the `ForeverWindowMover` folder at the root of the archive — the same shape the packager produces from `package-as`.
 
-`-Check` makes it a usable pre-commit or CI gate: it reports what *would* change and exits 1 without writing.
+`-Check` makes it a usable pre-commit hook as well as the CI gate: it reports problems and exits 1 without writing.
 
 ## The addon-list icon
 
@@ -154,12 +177,20 @@ Combat:
 Packaging and tooling:
 
 - [ ] `.\tools\build.ps1 -Check` passes on a clean checkout.
-- [ ] Hand-editing `ForeverWindowMover/CHANGELOG.md` makes `-Check` fail.
+- [ ] Bumping `## Version` in the `.toc` alone makes `-Check` fail, naming each site that disagrees.
+- [ ] Adding a `.lua` file or the `.tga` to `.pkgmeta`'s `ignore` makes `-Check` fail.
 - [ ] The addon shows its icon in the character-select AddOns list.
-- [ ] The zip in `dist/` contains a `ForeverWindowMover` folder, no `.png`, and loads when dropped into `Interface\AddOns\`.
+- [ ] The zip in `dist/` contains a `ForeverWindowMover` folder, no `.png`, no `docs/` or `tools/`, and loads when dropped into `Interface\AddOns\`.
 - [ ] `.\tools\Sync-ToAddOns.ps1` reports `0 added, 0 updated, 0 removed` on a second consecutive run.
 - [ ] A junk file dropped into the installed folder is removed by the next sync.
-- [ ] `-Remove` after `-Mode Junction` leaves the repository folder intact.
+
+Release pipeline (first time, and after any workflow change):
+
+- [ ] `CF_API_TOKEN` is set as a repository secret.
+- [ ] Workflow permissions allow `contents: write`.
+- [ ] A `workflow_dispatch` run from the Actions tab packages without errors.
+- [ ] An annotated tag push produces a GitHub release with `CHANGELOG.md` as the notes and a zip attached.
+- [ ] The file appears on CurseForge project 1737408, flagged for the right game version.
 
 Titan / LDB:
 
@@ -172,11 +203,20 @@ Run with `/console scriptErrors 1`, or BugSack, so swallowed problems surface du
 
 ## Release steps
 
-1. Bump the version in all five places: `## Version` in the `.toc`, `addon.version` and the header comment in `ForeverWindowMover.lua`, the title line in `README.md`, and the title line in `ForeverWindowMover/README.txt`. Run `.\tools\build.ps1 -Check` to confirm you did not miss one — it checks every site against the `.toc`.
-2. Update `## Interface` if targeting a new client build, and the Interface number quoted in `README.md`, `ForeverWindowMover/README.txt`, and `docs/README.md`. `-Check` covers these too.
-3. Add the "NEW IN x.y.z" section to both `README.md` and `ForeverWindowMover/README.txt`, and note whether the saved-position format changed.
-4. Add the release to `CHANGELOG.md` **at the repository root only**, as a new `## x.y.z` section at the top. Group entries under Added / Changed / Fixed / Removed / Unchanged, and say explicitly when the `ForeverWindowMoverDB` format is unchanged. The in-package copy is generated from it.
+1. Bump the version in all four places: `## Version` in the `.toc`, `addon.version` and the header comment in `ForeverWindowMover.lua`, and the title line in `README.md`. Run `.\tools\build.ps1 -Check` to confirm you did not miss one — it checks every site against the `.toc`.
+2. Update `## Interface` if targeting a new client build, and the Interface number quoted in `README.md` and `docs/README.md`. `-Check` covers these too.
+3. Add a "NEW IN x.y.z" section to `README.md`, and note whether the saved-position format changed. If nothing user-visible changed, say that rather than inventing something.
+4. Add the release to `CHANGELOG.md` as a new `## x.y.z` section at the top. Group entries under Added / Changed / Fixed / Removed / Unchanged, and say explicitly when the `ForeverWindowMoverDB` format is unchanged. This file is published verbatim as the GitHub release notes and the CurseForge changelog, so write it for users.
 5. Update these docs if behaviour, the group list, or the schema changed.
-6. Run `.\tools\build.ps1`. It regenerates the in-package copies, fails on any inconsistency, and writes `dist\ForeverWindowMover-x.y.z.zip` with the `ForeverWindowMover` folder (the folder itself, not its contents) at the archive root.
-7. Work through the test checklist on a clean saved-variables file and on one carried over from the previous version.
-8. Commit the regenerated files along with the release, and tag it `vx.y.z`, so the next changelog entry can be diffed against it with `git diff vx.y.z..HEAD -- ForeverWindowMover`.
+6. Run `.\tools\build.ps1 -Check`, then work through the test checklist on a clean saved-variables file and on one carried over from the previous version. `.\tools\Sync-ToAddOns.ps1` installs the build for you.
+7. Commit, then tag **annotated** and push the tag:
+
+   ```powershell
+   git tag -a vx.y.z -m "Forever Window Mover x.y.z"
+   git push origin main vx.y.z
+   ```
+
+   The tag push triggers `.github/workflows/release.yml`, which validates, packages and publishes. A lightweight tag (`git tag` with no `-a`) will not work.
+8. Check the Actions run, then confirm the file appeared on CurseForge and the GitHub release has the right notes attached.
+
+The annotated tag also means the next release can be diffed against this one with `git diff vx.y.z..HEAD`.

@@ -41,3 +41,6 @@ luac.out
 
 # Build output from tools/build.ps1
 /dist/
+
+# Working directory used by the BigWigs packager (release.sh)
+/.release/

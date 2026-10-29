@@ -1,0 +1,51 @@
+name: Package and release
+
+# Releases are tag-driven. The packager reads the tag for the version number
+# and generates release notes from the commits since the previous tag, so the
+# tag MUST be annotated (git tag -a v0.3.3 -m "...") or it will not be found.
+on:
+  push:
+    tags:
+      - 'v*'
+  # Lets you package a test build from the Actions tab without tagging. An
+  # untagged build is marked as alpha and is not uploaded to CurseForge.
+  workflow_dispatch:
+
+# Required for the packager to create the GitHub release. Without it the run
+# fails with "Resource not accessible by integration".
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Package and release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Clone project
+        uses: actions/checkout@v4
+        with:
+          # Full history, or the packager cannot find the previous tag and the
+          # generated release notes come out empty.
+          fetch-depth: 0
+
+      # Fails the run before anything is published if a version string, the
+      # Interface number, or the generated icon is out of sync. The packager
+      # itself does not check any of that.
+      - name: Validate the release
+        shell: pwsh
+        run: ./tools/build.ps1 -Check
+
+      - name: Package and release
+        uses: BigWigsMods/packager@v2
+        env:
+          # CurseForge project id comes from ## X-Curse-Project-ID in the .toc.
+          # These are the current variable names; the wiki example still shows
+          # the deprecated CF_API_KEY and GITHUB_OAUTH.
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          # Provided automatically by Actions; no need to add it as a secret.
+          GH_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Only needed if you also publish to these sites. An unset token
+          # just skips that upload.
+          WOWI_API_TOKEN: ${{ secrets.WOWI_API_TOKEN }}
+          WAGO_API_TOKEN: ${{ secrets.WAGO_API_TOKEN }}
