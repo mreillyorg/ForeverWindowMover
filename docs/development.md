@@ -18,12 +18,27 @@ ForeverWindowMover-repo/
 ├── .pkgmeta                    <- defines what ships; read by tools/ too
 ├── .github/workflows/
 │   └── release.yml             <- tag -> validate -> package -> CurseForge
+├── .luacheckrc                 <- lint config; declares every WoW global used
+├── run-tests.cmd               <- launcher for tools/run_tests.py
+├── tests/                      <- offline Lua harnesses, do NOT ship
+│   ├── wow.lua                 <- stand-in for the client, loaded first
+│   ├── syntax.lua              <- compiles every TOC-listed file
+│   ├── groups.lua              <- the group table as a saved-variable contract
+│   ├── positions.lua           <- save/apply unit conversion and drift
+│   ├── state.lua               <- bootstrap, mutators, anchor capture
+│   ├── handles.lua             <- MOVE tab placement and visibility
+│   ├── options.lua             <- panel layout and combat gating
+│   └── broker.lua              <- the optional LibDataBroker launcher
 ├── docs/                       <- this documentation, does not ship
 ├── tools/                      <- does not ship
 │   ├── Common.ps1              <- shared helpers, dot-sourced by the others
-│   ├── build.ps1               <- validate, and build a local zip
+│   ├── build.ps1               <- validate sources, and build a local zip
 │   ├── Sync-ToAddOns.ps1       <- install into Interface\AddOns for testing
-│   └── Convert-IconToTga.ps1   <- PNG source art -> client-readable TGA
+│   ├── Convert-IconToTga.ps1   <- PNG source art -> client-readable TGA
+│   ├── run_tests.py            <- discover and run the harnesses
+│   ├── check_lua_quality.py    <- compile + harnesses + zero-warning lint
+│   ├── check_package.py        <- validate the built zip
+│   └── fault_inject.py         <- prove the harnesses catch each bug; not in CI
 ├── dist/                       <- local build output, git-ignored
 └── .release/                   <- packager working directory, git-ignored
 ```
@@ -78,6 +93,89 @@ Two guards exist because getting this wrong is quiet rather than loud:
 
 Before 0.3.3 the addon lived in a subfolder and `CHANGELOG.md` and `LICENSE` were **generated** into it from the root copies, with `build.ps1` checking for drift. The flat layout made that unnecessary: there is one of each now, and they ship directly. `README.txt` went the same way — it duplicated `README.md` as plain text, and `README.md` ships.
 
+## Testing and the quality gate
+
+The client's embedded interpreter is not a standalone executable, so none of
+this can run in game. Install stock Lua 5.1 and luacheck:
+
+```bash
+apt-get install lua5.1 lua-check      # Debian/Ubuntu, and what CI uses
+```
+
+On Windows, put `lua5.1.exe`, `luac5.1.exe` and `luacheck.exe` on PATH, set
+`LUA51` / `LUAC51` / `LUACHECK`, or pass explicit paths to the scripts.
+
+```powershell
+.\run-tests.cmd                       # just the harnesses
+python tools\run_tests.py             # same thing, no pause
+python tools\check_lua_quality.py     # the full gate, as CI runs it
+python tools\fault_inject.py          # prove the harnesses still have teeth
+```
+
+`check_lua_quality.py` is three gates in the order that fails cheapest first:
+
+1. `luac5.1 -p` on every Lua file, including the harnesses and `.luacheckrc`.
+2. Every harness in `tests/`, via `run_tests.py`.
+3. `luacheck . --codes`, which must report **zero** warnings.
+
+It refuses an interpreter that is not stock Lua 5.1. LuaJIT and 5.3/5.4 are
+supersets of what the client provides, so a harness that passed under them
+could still be relying on something that does not exist in game.
+
+### The harnesses
+
+`tests/wow.lua` is a deliberately small stand-in for the client: one generic
+region type with the full method set, an event registry, and geometry that does
+real arithmetic. UIParent is 800x600 at effective scale 1, and `SetPoint`
+genuinely moves a frame, so a save/apply cycle can be repeated to check for
+drift rather than only inspecting one call.
+
+Harnesses load it first, then the addon's files against their own namespace
+table:
+
+```lua
+local wow = assert(loadfile("tests/wow.lua"))()
+local addon = {}
+assert(loadfile("ForeverWindowMover.lua"))("ForeverWindowMover", addon)
+wow.fire("ADDON_LOADED", "ForeverWindowMover")
+```
+
+Nothing is tested through a back door: the addon exposes `SavePosition` and
+friends as file locals, so the harnesses drive the real entry points -- events,
+the handle's drag scripts, the panel's `OnClick` and `OnUpdate` -- and assert on
+`ForeverWindowMoverDB` and on where frames ended up. That also catches wiring
+mistakes, not just arithmetic.
+
+`syntax.lua` runs first because a parse error should fail in a second rather
+than after everything else. It reads the module list from the TOC, so a file
+added there is compile-checked automatically and a `.lua` at the root that the
+TOC does not load is reported.
+
+### Fault injection
+
+`tools/fault_inject.py` re-introduces each fixed bug into a throwaway copy of
+the checkout and requires a harness to notice. A suite that keeps passing on
+broken code is not testing anything.
+
+This is not theoretical. On its first run two mutations survived: both cases
+covering the anchor-capture fix were asserting the right thing about the wrong
+code path, so that fix had no real coverage. `tests/state.lua` cases 10 to 12
+exist because of that run.
+
+It also showed that single-line removals are often survivable *by design* --
+Blizzard's anchors are captured at three separate points, so losing one is
+covered by the others. Mutations therefore remove a capability rather than a
+line, and a mutation whose pattern no longer matches is reported as a failure,
+not skipped, because it has stopped guarding anything.
+
+**This is deliberately not part of CI.** It runs the whole suite once per
+mutation, so it costs roughly an order of magnitude more than the quality gate
+for a result that only changes when the harnesses or the fixed bugs change --
+which is not on every push. Run it when you touch `tests/`, when you change
+any of the behaviour a mutation targets, and before a release. If you add it to
+the workflow later, put it on `workflow_dispatch` or a schedule rather than on
+every push.
+
 ## CurseForge publishing
 
 Releases are built and published by the [BigWigs packager](https://github.com/BigWigsMods/packager) from `.github/workflows/release.yml`. The whole flow is driven by pushing a tag:
@@ -87,7 +185,14 @@ git tag -a v0.3.4 -m "Forever Window Mover 0.3.4"
 git push origin v0.3.4
 ```
 
-The workflow then runs `tools/build.ps1 -Check` as a gate, and only if that passes hands over to `BigWigsMods/packager@v2`, which builds the zip from `.pkgmeta`, creates a GitHub release with `CHANGELOG.md` as the notes, and uploads to CurseForge project **1737408** (from `## X-Curse-Project-ID` in the `.toc`).
+The workflow runs, in order: the Lua 5.1 install, the quality gate, `tools/build.ps1 -Check`, a packager build with `-d` so nothing uploads, `tools/check_package.py` against that build, the artifact upload, and finally -- **only on a tag** -- a second packager run with uploading enabled, which creates the GitHub release with `CHANGELOG.md` as the notes and publishes to CurseForge project **1737408** (from `## X-Curse-Project-ID` in the `.toc`).
+
+Two deliberate choices in that order:
+
+- **It builds on pushes to `main` and `develop` as well as on tags.** A tag-only workflow never runs its own release steps until a release is in flight, which is the worst moment to discover one of them is broken. Branch pushes do everything except publish.
+- **Nothing is published that has not been checked.** The verification build uses `-d`, so the structure check runs against a real archive before any upload exists. A CurseForge file cannot be quietly withdrawn, which makes the extra few seconds of rebuilding worth it.
+
+Publishing is gated by a plain `if: startsWith(github.ref, 'refs/tags/')` on that last step rather than by computing a flag into the packager's arguments. An empty string is falsy in GitHub expressions, so the obvious `${{ cond && '' || '-d' }}` is silently *always* `-d`: publishing would be disabled while the workflow looked correct.
 
 Things that will bite you:
 
@@ -174,8 +279,14 @@ Combat:
 - [ ] Clicking a MOVE tab in combat does nothing and does not error.
 - [ ] Right-clicking the Titan launcher in combat prints the combat message.
 
+Most of the behaviour above is now covered by `tests/`, so run
+`python tools\check_lua_quality.py` first and use this list for what a harness
+cannot reach: actual rendering, real client frames, and Titan Panel itself.
+
 Packaging and tooling:
 
+- [ ] `python tools\check_lua_quality.py` passes, including zero luacheck warnings.
+- [ ] `python tools\fault_inject.py` reports every mutation caught.
 - [ ] `.\tools\build.ps1 -Check` passes on a clean checkout.
 - [ ] Bumping `## Version` in the `.toc` alone makes `-Check` fail, naming each site that disagrees.
 - [ ] Adding a `.lua` file or the `.tga` to `.pkgmeta`'s `ignore` makes `-Check` fail.
@@ -208,7 +319,7 @@ Run with `/console scriptErrors 1`, or BugSack, so swallowed problems surface du
 3. Add a "NEW IN x.y.z" section to `README.md`, and note whether the saved-position format changed. If nothing user-visible changed, say that rather than inventing something.
 4. Add the release to `CHANGELOG.md` as a new `## x.y.z` section at the top. Group entries under Added / Changed / Fixed / Removed / Unchanged, and say explicitly when the `ForeverWindowMoverDB` format is unchanged. This file is published verbatim as the GitHub release notes and the CurseForge changelog, so write it for users.
 5. Update these docs if behaviour, the group list, or the schema changed.
-6. Run `.\tools\build.ps1 -Check`, then work through the test checklist on a clean saved-variables file and on one carried over from the previous version. `.\tools\Sync-ToAddOns.ps1` installs the build for you.
+6. Run `python tools\check_lua_quality.py` and `.\tools\build.ps1 -Check`, then work through the manual checklist on a clean saved-variables file and on one carried over from the previous version. `.\tools\Sync-ToAddOns.ps1` installs the build for you.
 7. Commit, then tag **annotated** and push the tag:
 
    ```powershell

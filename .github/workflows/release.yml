@@ -1,14 +1,19 @@
 name: Package and release
 
-# Releases are tag-driven. The packager reads the tag for the version number
-# and generates release notes from the commits since the previous tag, so the
-# tag MUST be annotated (git tag -a v0.3.3 -m "...") or it will not be found.
 on:
   push:
+    # Tags publish. Branch pushes build and verify everything WITHOUT uploading.
+    #
+    # The branch trigger is the point of this list. A tag-only workflow never
+    # exercises its own release steps until a release is already in flight, so
+    # the first run of any new step happens when it is most expensive to be
+    # wrong. Building on every push to these branches makes that impossible.
+    branches:
+      - main
+      - develop
     tags:
       - 'v*'
-  # Lets you package a test build from the Actions tab without tagging. An
-  # untagged build is marked as alpha and is not uploaded to CurseForge.
+  # Lets you exercise the whole pipeline from the Actions tab without tagging.
   workflow_dispatch:
 
 # Required for the packager to create the GitHub release. Without it the run
@@ -18,34 +23,98 @@ permissions:
 
 jobs:
   release:
-    name: Package and release
+    name: Verify, package and release
     runs-on: ubuntu-latest
 
     steps:
-      - name: Clone project
+      - name: Checkout with tag history
         uses: actions/checkout@v4
         with:
           # Full history, or the packager cannot find the previous tag and the
           # generated release notes come out empty.
           fetch-depth: 0
 
-      # Fails the run before anything is published if a version string, the
-      # Interface number, or the generated icon is out of sync. The packager
-      # itself does not check any of that.
-      - name: Validate the release
+      # The WoW client embeds Lua 5.1, so test against exactly that dialect.
+      # Not LuaJIT and not 5.3/5.4: both are supersets that would let the addon
+      # or a harness come to depend on something the client does not have.
+      # tools/check_lua_quality.py rejects an interpreter that is not stock 5.1.
+      - name: Install Lua 5.1 and luacheck
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y lua5.1 lua-check
+          lua5.1 -v
+          luac5.1 -v
+          luacheck --version
+
+      # Cheapest gate first: compile, then the offline harnesses, then lint.
+      - name: Enforce Lua 5.1 syntax, tests and zero-warning lint
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/check_lua_quality.py --lua lua5.1 --luac luac5.1 --luacheck luacheck
+
+      # Source-side checks the packager does not make: version strings agreeing
+      # across every file, the TOC and the Lua files agreeing on what exists,
+      # .pkgmeta's package-as, and the icon being present and not a PNG.
+      - name: Check source and packaging metadata
         shell: pwsh
         run: ./tools/build.ps1 -Check
 
-      - name: Package and release
+      # Built with -d, which skips every upload, so the structure can be
+      # checked BEFORE anything is published. A CurseForge file cannot be
+      # quietly withdrawn, so the order matters: verify, then publish.
+      - name: Build the package without uploading
+        uses: BigWigsMods/packager@v2
+        with:
+          args: -d
+
+      # Artefact-side checks: exactly one top-level folder, every runtime file
+      # the TOC names actually present, no tests/ or tools/ content, and the
+      # shipped TOC matching the repository.
+      - name: Check the built package
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/check_package.py
+
+      # include-hidden-files is required, not optional. From v4.4 onwards
+      # actions/upload-artifact excludes hidden files by default and treats ANY
+      # path component beginning with a dot as hidden, so `.release/*.zip`
+      # matches nothing and the step reports "No files were found".
+      #
+      # The glob is deliberately narrow: release.sh also reads an optional
+      # .release/.env holding upload tokens, so do not widen this to .release/*.
+      - name: Upload the package as a workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ForeverWindowMover-package
+          path: .release/*.zip
+          if-no-files-found: error
+          include-hidden-files: true
+
+      # Only a tag publishes. An untagged build has no release version, and
+      # this runs as a separate step rather than by computing a flag into the
+      # packager's args because an empty string is FALSY in GitHub expressions:
+      #   ${{ startsWith(github.ref, 'refs/tags/') && '' || '-d' }}
+      # is silently always '-d', which would disable publishing while looking
+      # correct. A plain `if:` cannot go wrong that way.
+      #
+      # This rebuilds from the same commit with uploading enabled. The few
+      # seconds are worth it: everything published has been through the
+      # structure check above.
+      - name: Publish to CurseForge and create the GitHub release
+        if: startsWith(github.ref, 'refs/tags/')
         uses: BigWigsMods/packager@v2
         env:
           # CurseForge project id comes from ## X-Curse-Project-ID in the .toc.
-          # These are the current variable names; the wiki example still shows
+          # These are the current variable names; the packager wiki still shows
           # the deprecated CF_API_KEY and GITHUB_OAUTH.
           CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
           # Provided automatically by Actions; no need to add it as a secret.
           GH_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Only needed if you also publish to these sites. An unset token
-          # just skips that upload.
+          # simply skips that upload.
           WOWI_API_TOKEN: ${{ secrets.WOWI_API_TOKEN }}
           WAGO_API_TOKEN: ${{ secrets.WAGO_API_TOKEN }}

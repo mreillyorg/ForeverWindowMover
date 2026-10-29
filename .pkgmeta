@@ -16,14 +16,19 @@ ignore:
   # Repository documentation. The shipped README.md links to these on GitHub
   # with absolute URLs, so none of it needs to be in the zip.
   - docs
-  # Build and local-install scripts; no use to an end user.
+  # Build, quality and local-install scripts; no use to an end user.
   - tools
+  # Offline Lua harnesses. They install stub globals over CreateFrame and
+  # friends, so shipping them would be actively harmful if one ever ran.
+  - tests
   # Source art. The client cannot read PNG, so only the generated .tga is of
   # any use in-game, and this file is larger than the rest of the addon
   # combined. See tools/Convert-IconToTga.ps1.
   - "*.png"
   # Local build output.
   - dist
+  # Convenience launchers for the scripts in tools/.
+  - "*.cmd"
 
 # The changelog is written by hand and kept in release order. Without this the
 # packager would replace it with a list of commits since the previous tag.

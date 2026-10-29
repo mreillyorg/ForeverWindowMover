@@ -12,6 +12,12 @@ The first release published through CurseForge. **No Lua in the addon changed**,
 
 Added
 
+- **A test suite.** Seven offline harnesses under `tests/`, run by `tools/run_tests.py` against stock Lua 5.1. They cover the save/apply unit conversion and its absence of drift, the anchor-capture rule behind Disable and Reset, saved-variable bootstrap resilience, the group table as a saved-variable contract, the MOVE tab's placement and visibility, the options panel including its derived height and combat gating, and the LibDataBroker launcher with and without a provider. `tests/wow.lua` is a stand-in for the client that the harnesses load first.
+- **A quality gate.** `tools/check_lua_quality.py` compiles every Lua file with `luac5.1 -p`, runs the harnesses, then requires luacheck to report **zero** warnings against the new `.luacheckrc`. It refuses an interpreter that is not stock Lua 5.1, because LuaJIT and 5.3/5.4 are supersets of what the client provides and passing under them would prove less than it appears to.
+- `.luacheckrc` declaring every WoW global the addon touches, rather than pulling in a community WoW std. An unrecognised name is then a real finding instead of being absorbed by a catch-all. `ForeverWindowMoverDB` is the only global the addon is permitted to create.
+- **Fault injection.** `tools/fault_inject.py` re-introduces each fixed bug into a throwaway copy and requires a harness to catch it. It paid for itself immediately: the first run found two cases that asserted the right thing about the wrong code path, so the anchor-capture fix was not actually covered and two faults were silently survivable. All nine mutations are now caught.
+- **An artefact check.** `tools/check_package.py` validates the built zip, which nothing else looked at: one top-level folder named for the addon, every runtime file the TOC names actually present, no `tests/` or `tools/` content, and the shipped TOC matching the repository so a repackaged older build cannot pass.
+- `run-tests.cmd`, a thin launcher for `tools/run_tests.py`.
 - **CurseForge publishing.** `## X-Curse-Project-ID: 1737408` in the `.toc`, a `.pkgmeta`, and `.github/workflows/release.yml` running the [BigWigs packager](https://github.com/BigWigsMods/packager). Pushing an annotated `v*` tag now validates the release, builds the zip, creates a GitHub release and uploads to CurseForge. Interface `16001` resolves to the Forever (`camelot`) game type, which the packager supports natively.
 - `.pkgmeta` is the single source of truth for what ships. `tools/build.ps1` and `tools/Sync-ToAddOns.ps1` read its `ignore` list instead of keeping their own copy, so a local zip, a local install and a CurseForge upload cannot contain different files.
 - `tools/build.ps1` gained checks the packager does not make: that `package-as` matches the addon name, and that no ignore rule would strip a `.lua` file, the `.toc`, or the icon out of the package. An icon that works locally and is missing from the zip is the kind of thing nobody notices until a user reports it.
@@ -23,6 +29,8 @@ Changed
 - `README.txt` is gone. It duplicated `README.md` in plain text for distribution sites, and `README.md` now ships in the zip. One readme, one version string to bump.
 - Links in the shipped `README.md` and `CHANGELOG.md` point at absolute GitHub URLs, since `docs/` is not in the package and relative links would be dead.
 - `Sync-ToAddOns.ps1` has no junction mode. With the addon at the repository root, linking it into `Interface\AddOns` would put `.git`, `docs/` and `tools/` inside the game install. `-Watch` covers the same iteration case. An existing junction is detected and refused rather than written through.
+- **The release workflow builds on pushes to `main` and `develop`, not only on tags.** A tag-only workflow never exercises its own release steps until a release is already in flight, so the first run of any new step happens when being wrong is most expensive. Branch pushes now run everything except the upload.
+- The package is built once with `-d` (no uploading), checked, and only then rebuilt with uploading enabled on a tag. A CurseForge file cannot be quietly withdrawn, so nothing is published that has not been through the structure check first.
 
 ## 0.3.3
 
