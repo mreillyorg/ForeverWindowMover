@@ -6,7 +6,7 @@ These functions live on the private addon table shared by the three Lua files (`
 
 | Field | Type | Notes |
 | --- | --- | --- |
-| `addon.version` | `string` | `"0.3.3"`. Display only. The `.toc` `## Version` is the source of truth; `tools/build.ps1` fails if the two disagree. |
+| `addon.version` | `string` | `"0.3.4"`. Display only. The `.toc` `## Version` is the source of truth; `tools/build.ps1` fails if the two disagree. |
 | `addon.author` | `string` | `"Michael Reilly"`. |
 | `addon.website` | `string` | GitHub URL shown in the options panel edit box and the Titan tooltip. |
 | `addon.groups` | `array` | Ordered list of `{key, label, frames}`. Drives options rows, tooltip lines, discovery, and reset. See [supported windows](supported-windows.md). |

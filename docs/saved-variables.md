@@ -58,7 +58,7 @@ Both boolean fields are written only when the user changes them, and both defaul
 
 ## Compatibility
 
-The 0.3.x releases did not change the saved-position format — 0.3.0 added the optional LDB launcher, 0.3.1 added author/URL display, 0.3.2 was bug fixes and packaging, and 0.3.3 was repository tooling only. None of them touch the schema, and positions saved by earlier versions load unchanged.
+The 0.3.x releases did not change the saved-position format — 0.3.0 added the optional LDB launcher, 0.3.1 added author/URL display, 0.3.2 was bug fixes, and 0.3.3 and 0.3.4 were repository tooling and packaging. None of them touch the schema, and positions saved by earlier versions load unchanged.
 
 One behavioural note for 0.3.2, with no schema change behind it: stored offsets have always been in UIParent units, but they used to be fed back into `SetPoint` without converting into the frame's own coordinate space. A window whose scale differed from `UIParent`'s was therefore re-applied slightly off. Existing entries are read exactly as written; they just land where they say now.
 

@@ -6,18 +6,15 @@ Author: Michael Reilly · Source / issues: https://github.com/mreillyorg/Forever
 
 Release dates are not recorded in the repository history, so versions are listed newest-first without dates.
 
-## 0.3.3
+## 0.3.4
 
-A repository, packaging and tooling release. **No Lua in the addon changed**, so in-game behaviour, the group list and the `ForeverWindowMoverDB` format are identical to 0.3.2.
+The first release published through CurseForge. **No Lua in the addon changed**, so in-game behaviour, the group list and the `ForeverWindowMoverDB` format are identical to 0.3.2.
 
 Added
 
 - **CurseForge publishing.** `## X-Curse-Project-ID: 1737408` in the `.toc`, a `.pkgmeta`, and `.github/workflows/release.yml` running the [BigWigs packager](https://github.com/BigWigsMods/packager). Pushing an annotated `v*` tag now validates the release, builds the zip, creates a GitHub release and uploads to CurseForge. Interface `16001` resolves to the Forever (`camelot`) game type, which the packager supports natively.
 - `.pkgmeta` is the single source of truth for what ships. `tools/build.ps1` and `tools/Sync-ToAddOns.ps1` read its `ignore` list instead of keeping their own copy, so a local zip, a local install and a CurseForge upload cannot contain different files.
 - `tools/build.ps1` gained checks the packager does not make: that `package-as` matches the addon name, and that no ignore rule would strip a `.lua` file, the `.toc`, or the icon out of the package. An icon that works locally and is missing from the zip is the kind of thing nobody notices until a user reports it.
-- `tools/Sync-ToAddOns.ps1`: installs the addon into `Interface\AddOns` for local testing. Mirrors only the files that ship, so the client loads what the zip would contain, and deletes files left behind by an older install instead of letting them shadow the new ones. Finds the AddOns directory automatically — `$env:WOW_ADDONS_PATH`, then by walking up from the repository, then the default install locations — and stops rather than guessing if more than one candidate turns up. Validates first unless `-SkipBuild`. Supports `-Watch` to re-sync on save, `-Remove` to uninstall, and `-WhatIf` for a dry run.
-- `tools/Common.ps1`: the addon name, `.toc` and `.pkgmeta` parsing, version/author metadata reads, shippable-file selection, AddOns discovery and target-path guard, shared by `build.ps1` and `Sync-ToAddOns.ps1`.
-- Both scripts validate their target before writing or deleting: the folder must be named `ForeverWindowMover` and its parent must be an `AddOns` directory. They write into a game install, so a mistyped `-AddOnsPath` fails instead of pointing a recursive delete somewhere unfortunate.
 
 Changed
 
@@ -26,6 +23,19 @@ Changed
 - `README.txt` is gone. It duplicated `README.md` in plain text for distribution sites, and `README.md` now ships in the zip. One readme, one version string to bump.
 - Links in the shipped `README.md` and `CHANGELOG.md` point at absolute GitHub URLs, since `docs/` is not in the package and relative links would be dead.
 - `Sync-ToAddOns.ps1` has no junction mode. With the addon at the repository root, linking it into `Interface\AddOns` would put `.git`, `docs/` and `tools/` inside the game install. `-Watch` covers the same iteration case. An existing junction is detected and refused rather than written through.
+
+## 0.3.3
+
+A repository and tooling release. Tagged but never published to CurseForge, because the packaging pipeline arrived in 0.3.4. **No Lua in the addon changed.**
+
+Added
+
+- `tools/Sync-ToAddOns.ps1`: installs the addon into `Interface\AddOns` for local testing. Mirrors only the files that ship, so the client loads what the zip would contain, and deletes files left behind by an older install instead of letting them shadow the new ones. Finds the AddOns directory automatically — `$env:WOW_ADDONS_PATH`, then by walking up from the repository, then the default install locations — and stops rather than guessing if more than one candidate turns up. Validates first unless `-SkipBuild`. Supports `-Watch` to re-sync on save, `-Remove` to uninstall, and `-WhatIf` for a dry run.
+- `tools/Common.ps1`: the addon name, `.toc` and `.pkgmeta` parsing, version/author metadata reads, shippable-file selection, AddOns discovery and target-path guard, shared by `build.ps1` and `Sync-ToAddOns.ps1`.
+- Both scripts validate their target before writing or deleting: the folder must be named `ForeverWindowMover` and its parent must be an `AddOns` directory. They write into a game install, so a mistyped `-AddOnsPath` fails instead of pointing a recursive delete somewhere unfortunate.
+
+Changed
+
 - `tools/build.ps1` reads its metadata through `Common.ps1` rather than parsing the `.toc` itself.
 
 Fixed

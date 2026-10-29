@@ -1,4 +1,4 @@
-# ForeverWindowMover 0.3.3
+# ForeverWindowMover 0.3.4
 Helps move some of the immovable Blizzard windows
 
 WoW: Forever 1.60.1 (Interface **16001**)
@@ -9,9 +9,11 @@ Source / issues: [https://github.com/mreillyorg/ForeverWindowMover](https://gith
 
 Full documentation (absolute links, because this file ships inside the addon where `docs/` does not): [docs](https://github.com/mreillyorg/ForeverWindowMover/blob/main/docs/README.md) — [user guide](https://github.com/mreillyorg/ForeverWindowMover/blob/main/docs/user-guide.md), [architecture](https://github.com/mreillyorg/ForeverWindowMover/blob/main/docs/architecture.md), [internal API](https://github.com/mreillyorg/ForeverWindowMover/blob/main/docs/api-reference.md), [saved variables](https://github.com/mreillyorg/ForeverWindowMover/blob/main/docs/saved-variables.md), [Titan integration](https://github.com/mreillyorg/ForeverWindowMover/blob/main/docs/titan-panel-integration.md), [development notes](https://github.com/mreillyorg/ForeverWindowMover/blob/main/docs/development.md)
 
-## NEW IN 0.3.3: NOTHING, IF YOU ONLY PLAY THE GAME
+## NEW IN 0.3.4: NOW ON CURSEFORGE
 
-A repository and tooling release. The addon's code is **unchanged** from 0.3.2, so there is nothing to relearn and nothing to reconfigure. If you are upgrading from 0.3.1, the fixes you want are in the 0.3.2 notes below. The new material is packaging and local-testing scripts, which only matter if you work on the addon.
+The first release you can install from CurseForge instead of unzipping by hand. The addon's code is **unchanged** from 0.3.2, so there is nothing to relearn and nothing to reconfigure. If you are coming from 0.3.1, the fixes you want are in the 0.3.2 notes below.
+
+0.3.3 was tagged but never published, so 0.3.2 is the last version anyone installed manually.
 
 ## NEW IN 0.3.2: DRAG AND RESET FIXES, ADDON LIST ICON
 

@@ -253,3 +253,8 @@ try {
 finally {
     if (Test-Path -LiteralPath $staging) { Remove-Item -LiteralPath $staging -Recurse -Force }
 }
+
+# Explicit, because every other path exits explicitly. Falling off the end
+# would leave $LASTEXITCODE holding whatever the caller's previous command set,
+# so a successful package could look like a failure.
+exit 0
