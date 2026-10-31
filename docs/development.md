@@ -38,6 +38,7 @@ ForeverWindowMover-repo/
 │   ├── run_tests.py            <- discover and run the harnesses
 │   ├── check_lua_quality.py    <- compile + harnesses + zero-warning lint
 │   ├── check_package.py        <- validate the built zip
+│   ├── bump_version.py         <- roll the version and pick the channel
 │   └── fault_inject.py         <- prove the harnesses catch each bug; not in CI
 ├── dist/                       <- local build output, git-ignored
 └── .release/                   <- packager working directory, git-ignored
@@ -175,6 +176,72 @@ which is not on every push. Run it when you touch `tests/`, when you change
 any of the behaviour a mutation targets, and before a release. If you add it to
 the workflow later, put it on `workflow_dispatch` or a schedule rather than on
 every push.
+
+## Bumping the version
+
+```powershell
+python tools\bump_version.py --patch --channel beta --dry-run
+python tools\bump_version.py --patch --channel beta --changelog-stub
+python tools\bump_version.py --channel release        # promote, same numbers
+python tools\bump_version.py --minor                  # keep the current channel
+```
+
+The version is written in nine places. `build.ps1 -Check` gates four of them,
+so missing one fails the build rather than shipping quietly — but finding out
+from a failed release is a slow way to learn, and the documentation sites it
+does not gate could go stale indefinitely.
+
+`--major`, `--minor` and `--patch` roll the number; `--channel` sets the
+suffix, where `release` means no suffix. Either can be used alone, so promoting
+a beta to a release is `--channel release` with no roll. Omitting `--channel`
+keeps whatever channel is in place.
+
+### The channel decides what CurseForge publishes
+
+The packager reads the file type from the **tag**, not from the TOC:
+
+| Tag | CurseForge file type |
+| --- | --- |
+| contains `alpha` | Alpha |
+| contains `beta` | Beta |
+| anything else | Release |
+| no tag at all | Alpha |
+
+The match is a case-insensitive substring anywhere in the tag, and `alpha` is
+checked first, so a tag containing both is an alpha. Verified against
+`release.sh` by tagging a scratch copy three ways.
+
+This tool keeps the suffix in the version itself as well as in the tag, so the
+version shown in game matches the file people downloaded. `0.3.5-beta` in the
+TOC, tagged `v0.3.5-beta`, published as a Beta file.
+
+### What it will not do
+
+- **It never blanket-replaces a version string.** Every site is an individually
+  specified pattern. Release-note headings are matched against the version being
+  *replaced*, and only on a re-channel, because on a numeric bump they describe
+  the previous release.
+- **It refuses a pattern that matches more than once.** Every site here is a
+  single specific line, so a second match means the pattern is too loose. This
+  guard exists because an earlier draft matched any `## <version>` heading and
+  rewrote all eight historical changelog headings to the new number in one go.
+- **It refuses a version whose tag already exists**, locally or on origin, since
+  a published version cannot be reused. `--allow-existing-tag` overrides it.
+- **It reports any remaining mention of the superseded version** that it did not
+  rewrite, so a site it does not know about surfaces as a list rather than as
+  silent staleness. Prose about an earlier release is expected in that list.
+- **It does not commit, tag or push.** It prints the commands.
+
+A numeric bump leaves the changelog alone, so `build.ps1 -Check` will fail until
+you add a `## <version>` section. That is deliberate: the check is what stops a
+release going out with no notes. `--changelog-stub` inserts an empty section if
+you would rather fill it in afterwards.
+
+Note that the working tree may have CRLF endings, depending on your git
+`autocrlf` setting. The tool reads bytes without newline translation and
+preserves any BOM, so a bump is byte-identical apart from the version — but its
+line-anchored patterns have to allow for `\r`, which is what caused it to
+silently skip the `.toc` and the Lua header on its first run.
 
 ## CurseForge publishing
 
@@ -314,8 +381,8 @@ Run with `/console scriptErrors 1`, or BugSack, so swallowed problems surface du
 
 ## Release steps
 
-1. Bump the version in all four places: `## Version` in the `.toc`, `addon.version` and the header comment in `ForeverWindowMover.lua`, and the title line in `README.md`. Run `.\tools\build.ps1 -Check` to confirm you did not miss one — it checks every site against the `.toc`.
-2. Update `## Interface` if targeting a new client build, and the Interface number quoted in `README.md` and `docs/README.md`. `-Check` covers these too.
+1. Bump the version with `python tools\bump_version.py`, which rewrites all nine places it is written and picks the release channel. See [bumping the version](#bumping-the-version). Run it with `--dry-run` first.
+2. Update `## Interface` if targeting a new client build, and the Interface number quoted in `README.md` and `docs/README.md`. `.\tools\build.ps1 -Check` covers these.
 3. Add a "NEW IN x.y.z" section to `README.md`, and note whether the saved-position format changed. If nothing user-visible changed, say that rather than inventing something.
 4. Add the release to `CHANGELOG.md` as a new `## x.y.z` section at the top. Group entries under Added / Changed / Fixed / Removed / Unchanged, and say explicitly when the `ForeverWindowMoverDB` format is unchanged. This file is published verbatim as the GitHub release notes and the CurseForge changelog, so write it for users.
 5. Update these docs if behaviour, the group list, or the schema changed.
