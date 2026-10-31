@@ -18,6 +18,7 @@ ForeverWindowMover-repo/
 ├── .pkgmeta                    <- defines what ships; read by tools/ too
 ├── .github/workflows/
 │   └── release.yml             <- tag -> validate -> package -> CurseForge
+├── .gitattributes              <- pins LF; CRLF for *.cmd; binaries protected
 ├── .luacheckrc                 <- lint config; declares every WoW global used
 ├── run-tests.cmd               <- launcher for tools/run_tests.py
 ├── tests/                      <- offline Lua harnesses, do NOT ship
@@ -237,11 +238,41 @@ you add a `## <version>` section. That is deliberate: the check is what stops a
 release going out with no notes. `--changelog-stub` inserts an empty section if
 you would rather fill it in afterwards.
 
-Note that the working tree may have CRLF endings, depending on your git
-`autocrlf` setting. The tool reads bytes without newline translation and
-preserves any BOM, so a bump is byte-identical apart from the version — but its
-line-anchored patterns have to allow for `\r`, which is what caused it to
-silently skip the `.toc` and the Lua header on its first run.
+The tool reads bytes without newline translation and preserves any BOM, so a
+bump is byte-identical apart from the version. Its line-anchored patterns still
+allow an optional `\r` even though [`.gitattributes`](#line-endings) now pins the
+working tree to LF: that tolerance is what was missing when it silently skipped
+the `.toc` and the Lua header, and keeping it costs nothing if someone checks
+out with their own `core.autocrlf`.
+
+## Line endings
+
+`.gitattributes` pins the working tree, rather than leaving it to each
+contributor's `core.autocrlf`. Text is LF, `*.cmd` and `*.bat` are CRLF because
+`cmd.exe` is unreliable with LF-only scripts inside parenthesised blocks, and
+`*.png`, `*.tga`, `*.blp` and `*.zip` are marked `binary` explicitly so no
+newline conversion can ever be applied to the icon the client loads.
+
+The index has always stored LF, so adding this changed no committed content —
+`git add --renormalize .` staged nothing. It only made the checkout match. Two
+concrete problems came from the mismatch:
+
+- `tools/bump_version.py` used patterns ending in a bare `$`, which cannot match
+  the end of a CRLF line, so it rewrote four of six version sites and skipped
+  the `.toc` and the Lua header without saying so.
+- `tools/build.ps1` copies the working tree into the local zip while CI builds
+  from a Linux checkout. The two archives differed in line endings for the same
+  commit. They are now byte-identical.
+
+If you have a checkout from before this was added, renormalise it with:
+
+```powershell
+git rm --cached -r .
+git reset --hard
+```
+
+That empties the index so every file is re-written through the new attributes.
+`git checkout-index -a -f` is not enough; it leaves the existing files alone.
 
 ## CurseForge publishing
 

@@ -1,0 +1,53 @@
+# Line endings are pinned here rather than left to each contributor's
+# core.autocrlf, so the working tree is the same on every machine.
+#
+# Why this matters beyond tidiness. Two concrete problems came from a CRLF
+# working tree against an LF index:
+#
+#   - tools/bump_version.py used line-anchored patterns ending in `$`, which
+#     cannot match the end of a CRLF line. It silently rewrote four of six
+#     version sites, skipping the .toc and the Lua header.
+#   - tools/build.ps1 copies the working tree into the local zip, while CI
+#     builds from a Linux checkout that is always LF. The two archives differed
+#     in line endings for the same commit, which makes "what shipped" harder to
+#     reason about than it should be.
+#
+# The index has always stored LF, so pinning eol=lf changes no committed
+# content. It only makes the checkout match.
+
+# Default: detect text, store LF, check out LF.
+* text=auto eol=lf
+
+# Everything the addon and its tooling are made of, stated explicitly so a new
+# extension is a deliberate decision rather than whatever auto-detection
+# decides on the day.
+*.lua   text eol=lf
+*.toc   text eol=lf
+*.xml   text eol=lf
+*.md    text eol=lf
+*.txt   text eol=lf
+*.ps1   text eol=lf
+*.py    text eol=lf
+*.sh    text eol=lf
+*.yml   text eol=lf
+*.yaml  text eol=lf
+LICENSE text eol=lf
+.gitattributes text eol=lf
+.gitignore     text eol=lf
+.luacheckrc    text eol=lf
+.pkgmeta       text eol=lf
+
+# Batch files are the exception. cmd.exe is unreliable with LF-only scripts,
+# particularly inside parenthesised blocks, and run-tests.cmd has one. These
+# are excluded from the package by .pkgmeta, so CRLF here never ships.
+*.cmd   text eol=crlf
+*.bat   text eol=crlf
+
+# Binary, and marked so explicitly. The .tga is the addon-list icon the client
+# loads; any newline conversion applied to it would corrupt the texture while
+# looking like a harmless diff. git already detects both as binary, but relying
+# on detection for a file that must never be touched is not worth the risk.
+*.png   binary
+*.tga   binary
+*.blp   binary
+*.zip   binary
