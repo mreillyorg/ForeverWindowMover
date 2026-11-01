@@ -53,7 +53,7 @@ Blizzard's **Defaults** button on the settings page resets all positions, re-ena
 
 The two are independent: use either, both, or neither. With both off nothing is draggable, and the page says so rather than leaving you guessing. **Show MOVE handles** on the main page still overrides both.
 
-A caution on the title-bar option while 0.4.0 is in beta: the drag strip spans the top of each window. It is kept clear of the close button and real buttons keep priority, but this has not been confirmed against every window in the client. If a close button stops responding, switch the option off and report which window it was.
+A caution on the title-bar option while 0.4.0 is in beta: the drag strip spans the top of each window. Clicks pass through it to whatever is underneath, so buttons there should keep working, and the strip is also kept clear of the close button as a fallback. This has not yet been confirmed against every window in the client. If a close button stops responding, switch the option off and report which window it was.
 
 ### Tab appearance
 

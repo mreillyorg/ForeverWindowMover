@@ -29,7 +29,7 @@ Unchanged
 
 Known limitation
 
-- With the title-bar option enabled, the drag strip sits across the top of each window. It is inset 40px from the right to clear the close button and sits at the window's own frame level so real buttons keep priority, but **this has not been confirmed against every supported window in the client**. If a close button or a control near the top of a window stops responding, switch the title-bar option off and please report which window it was.
+- With the title-bar option enabled, the drag strip sits across the top of each window. Clicks are passed through to whatever is beneath it, so a close button should still work; the strip is also inset from the right and kept at the window's own layer as a fallback on builds that lack click passthrough. **This has not been confirmed against every supported window in the client**, which is why the release is a beta. If a close button or a control near the top of a window stops responding, switch the title-bar option off and please report which window it was.
 
 ## 0.3.4
 

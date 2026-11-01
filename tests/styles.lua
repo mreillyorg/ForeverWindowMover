@@ -251,6 +251,54 @@ do
         tostring(anchors.TOPRIGHT[4])))
 end
 
+-- 9b. Clicks propagate through the strip, so a close button underneath still
+--     responds. This is the real protection against the strip swallowing input;
+--     the right-hand inset is only the fallback for builds without the API.
+do
+    local _, frame = boot({positions = {}, enabled = {}, handleTitlebar = true})
+    local _, titlebar = parts(frame)
+    assert(titlebar.propagateClicks == true,
+        "the strip must propagate clicks so controls underneath keep working")
+
+    -- Motion is deliberately NOT propagated: the strip owns GameTooltip to show
+    -- "Drag to move", and propagating motion lets the region beneath compete
+    -- for it. A title bar has nothing to hover, so this costs little.
+    assert(titlebar.propagateMotion ~= true,
+        "motion must not be propagated, or the strip loses the tooltip that makes it findable")
+end
+
+-- 9c. A build with no propagation API. The strip must still install, still
+--     drag, and still be inset from the right, which is the whole reason the
+--     inset was kept rather than replaced.
+do
+    wow.reset()
+    wow.mousePropagation = false
+    _G.ForeverWindowMoverDB = {positions = {}, enabled = {}, handleTitlebar = true}
+    local addon = {}
+    assert(loadfile(base .. "ForeverWindowMover.lua"))("ForeverWindowMover", addon)
+    local frame = wow.newRegion("Frame", "MerchantFrame", nil)
+    frame:SetPoint("TOPLEFT", _G.UIParent, "TOPLEFT", 16, -116)
+    wow.place(frame, 0, 0, 1)
+    wow.fire("ADDON_LOADED", "ForeverWindowMover")
+
+    local _, titlebar = parts(frame)
+    assert(titlebar, "the strip must still install without the propagation API")
+    assert(titlebar.SetPropagateMouseClicks == nil, "this case needs the API absent")
+    assert(titlebar.shown == true, "and still be live")
+
+    local anchors = {}
+    for _, p in ipairs(titlebar.points) do anchors[p[1]] = p end
+    assert(anchors.TOPRIGHT[4] == -40,
+        "without propagation the right-hand inset is the only protection, so it must remain")
+
+    wow.place(frame, 55, 15, 1)
+    titlebar.scripts.OnDragStart(titlebar)
+    titlebar.scripts.OnDragStop(titlebar)
+    local saved = _G.ForeverWindowMoverDB.positions.MerchantFrame
+    assert(saved and saved.x == 55, "dragging must still work without the propagation API")
+    wow.mousePropagation = true
+end
+
 -- 10. Dragging by the strip saves a position, exactly as the tab does.
 do
     local _, frame = boot({positions = {}, enabled = {}, handleTitlebar = true})

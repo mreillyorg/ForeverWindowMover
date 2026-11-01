@@ -19,7 +19,7 @@ Or do away with the tab: switch on **Drag by the window's title bar** and move e
 
 **Show MOVE handles** still turns everything off at once, including from the Titan right-click.
 
-Defaults reproduce 0.3.4 exactly, and saved positions are untouched. This is a **beta** because the title-bar option changes how mouse clicks reach Blizzard's windows: if a window's close button stops responding, turn that option off and report which window it was.
+Defaults reproduce 0.3.4 exactly, and saved positions are untouched. This is a **beta** because the title-bar option changes how mouse clicks reach Blizzard's windows. Clicks are passed through to whatever is underneath, so buttons in a title bar should keep working — but if a window's close button stops responding, turn that option off and report which window it was.
 
 ## NEW IN 0.3.4: NOW ON CURSEFORGE
 

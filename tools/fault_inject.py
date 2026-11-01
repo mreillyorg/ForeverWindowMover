@@ -90,6 +90,23 @@ MUTATIONS = [
      'titlebar:SetFrameLevel(frame:GetFrameLevel() + 12)',
      'tests/styles.lua'),
 
+    ('strip no longer propagates clicks, so it swallows the close button',
+     'ForeverWindowMover.lua',
+     'titlebar:SetPropagateMouseClicks(true)',
+     'titlebar:SetPropagateMouseClicks(false)',
+     'tests/styles.lua'),
+
+    ('strip propagates motion too, losing the tooltip that makes it findable',
+     'ForeverWindowMover.lua',
+     '''            if type(titlebar.SetPropagateMouseClicks) == "function" then
+                titlebar:SetPropagateMouseClicks(true)
+            end''',
+     '''            if type(titlebar.SetPropagateMouseClicks) == "function" then
+                titlebar:SetPropagateMouseClicks(true)
+                titlebar:SetPropagateMouseMotion(true)
+            end''',
+     'tests/styles.lua'),
+
     ('the title-bar toggle ignored, so the strip is always live',
      'ForeverWindowMover.lua',
      'if live and addon.TitlebarEnabled() then',

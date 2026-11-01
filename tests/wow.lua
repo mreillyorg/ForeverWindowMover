@@ -228,6 +228,14 @@ local function newRegion(kind, name, parent, template)
         function region:SetBackdropColor(r, g, b, a) self.backdropColour = {r, g, b, a} end
     end
 
+    -- Mouse-input propagation is a newer API, so like BackdropTemplate it is
+    -- attached conditionally and the addon feature-detects it.
+    -- wow.mousePropagation = false simulates a build without it.
+    if wow.mousePropagation then
+        function region:SetPropagateMouseClicks(value) self.propagateClicks = not not value end
+        function region:SetPropagateMouseMotion(value) self.propagateMotion = not not value end
+    end
+
     if parent then parent.children[#parent.children + 1] = region end
     wow.frames[#wow.frames + 1] = region
     if name then
@@ -264,6 +272,7 @@ function wow.reset()
     wow.tickers = {}
     wow.inCombat = false
     wow.backdropTemplate = true
+    wow.mousePropagation = true
     for name in pairs(wow.named) do
         if name ~= "UIParent" then _G[name] = nil end
     end
@@ -287,6 +296,9 @@ _G.UIParent.top = SCREEN_HEIGHT
 -- Set false to simulate a build before 9.0, where asking for BackdropTemplate
 -- fails outright. The addon wraps that CreateFrame in pcall for exactly this.
 wow.backdropTemplate = true
+-- Set false to simulate a build with no SetPropagateMouseClicks, where the
+-- title-bar strip falls back to the right-hand inset alone.
+wow.mousePropagation = true
 -- Set false to simulate a build with no RegisterCanvasLayoutSubcategory, where
 -- the Handles page has to fall back to its own top-level entry. Read when
 -- wow.installSettings runs, so set it before then.

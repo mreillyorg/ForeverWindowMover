@@ -78,7 +78,15 @@ Each installed window gets both, and each is independently toggleable under the 
 - **The MOVE tab** (`info.handle`) — a visible `Button` above the window's top-left corner, at frame level +12. Styleable; see below.
 - **The title-bar strip** (`info.titlebar`) — an invisible `Button` spanning the window's top edge, so the window can be dragged by its own title bar with no tab in the way.
 
-There is no portable title-bar object to hook. `MerchantFrame`'s title is a `FontString`, which cannot take mouse input, and only some of the newer frames expose a `TitleContainer`. So the strip is ours, and two things keep it from eating clicks that belong to the window: it is inset from the right by `TITLEBAR_RIGHT_INSET` (40) to clear the close button, and it takes the window's **own** frame level rather than +12, so a genuine interactive child still wins the click. Both measures are belt and braces, because swallowing a close button would make the feature worse than not having it. The harness asserts the geometry and the frame level; whether a real close button still responds needs a client.
+There is no portable title-bar object to hook. `MerchantFrame`'s title is a `FontString`, which cannot take mouse input, and only some of the newer frames expose a `TitleContainer`. So the strip is ours, and three things keep it from eating clicks that belong to the window:
+
+1. **`SetPropagateMouseClicks(true)`.** This is the real protection: a click on the strip is passed to the region immediately beneath it as well, so a close button underneath still fires. Feature-detected, because it is a newer API than the oldest build the addon loads on, and done in its own `pcall` so a failure cannot leave the strip half-wired.
+2. **Inset from the right by `TITLEBAR_RIGHT_INSET` (40)**, clearing the close button. This is the *fallback* for builds without propagation, which is why it was kept rather than removed once propagation went in.
+3. **The window's own frame level**, rather than the tab's +12, so a genuine interactive child keeps priority.
+
+Motion is deliberately **not** propagated. The strip owns `GameTooltip` to show "Drag to move", which is the only thing making an invisible control discoverable, and propagating motion lets the region beneath compete for the tooltip. A title bar is mostly artwork with nothing to hover, so blocking motion there costs little; blocking clicks costs a close button. Different trade, different answer.
+
+The harness asserts the geometry, the frame level, that clicks are propagated and that motion is not, and that the strip still installs and drags on a build with no propagation API. Whether a real close button actually fires still needs a client.
 
 ### Handle styling
 

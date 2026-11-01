@@ -364,7 +364,7 @@ geometry; these are the parts only a client can answer:
 
 - [ ] Each of the four styles looks right, and `blizzard` actually draws a border.
 - [ ] `minimal` shows three legible grip dots rather than an empty box.
-- [ ] **With the title-bar strip enabled, every window's close button still works.** This is the one real risk in the feature: the strip is inset 40px from the right and sits at the window's own frame level, but neither measure is verifiable offline.
+- [ ] **With the title-bar strip enabled, every window's close button still works.** This is the one real risk in the feature. Three measures protect it — `SetPropagateMouseClicks` passes the click through to whatever is underneath, the strip is inset 40px from the right, and it sits at the window's own frame level — but click routing in the live client is precisely what a stub cannot model, so check each of the eleven frames.
 - [ ] With the strip enabled, clicking inside a window (vendor item list, bank slots, profession recipe list) still does what it should, and does not start a drag.
 - [ ] Hovering the strip shows the tooltip, since nothing else indicates it is there.
 - [ ] With the tab off and the strip on, windows are still movable and no tab is visible anywhere.

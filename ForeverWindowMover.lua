@@ -550,6 +550,26 @@ local function InstallFrame(name, groupKey, label)
         titlebar:Hide()
     end)
 
+    -- Let a click on the strip reach whatever is underneath as well, so a close
+    -- button or a control near the top of a window still responds. This is the
+    -- real protection; TITLEBAR_RIGHT_INSET is the fallback for builds without
+    -- the API, which is why both are kept.
+    --
+    -- Motion is deliberately NOT propagated. The strip owns GameTooltip to show
+    -- "Drag to move", which is the only thing making an invisible control
+    -- discoverable, and propagating motion lets the region beneath compete for
+    -- the tooltip. A title bar is mostly artwork with nothing to hover, so
+    -- blocking motion there costs little; blocking clicks costs a close button.
+    --
+    -- In its own pcall: a failure here must not leave the strip half-wired.
+    if titlebar then
+        pcall(function()
+            if type(titlebar.SetPropagateMouseClicks) == "function" then
+                titlebar:SetPropagateMouseClicks(true)
+            end
+        end)
+    end
+
     installed[name] = {frame = frame, handle = handle, titlebar = titlebar,
                        background = background, label = labelText, grip = grip}
     ApplyHandleStyle(name)
