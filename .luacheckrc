@@ -53,6 +53,36 @@ read_globals = {
     "C_Timer",
     -- Combat lockdown gate
     "InCombatLockdown",
+    -- Colour picker for the custom handle style.
+    "OpacitySliderFrame",
+    "ShowUIPanel",
+
+    -- ColorPickerFrame is read-only EXCEPT for the five callback fields the
+    -- pre-10.0 API requires you to assign before showing it. Listing them
+    -- individually rather than making the whole global writable means a write
+    -- to any other field is still reported. On 10.0 and later the addon uses
+    -- SetupColorPickerAndShow instead and assigns nothing.
+    -- Declaring `fields` makes the list exhaustive, so this doubles as the
+    -- exact API surface the addon depends on. Reaching for anything not listed
+    -- here is reported rather than silently assumed to exist.
+    ColorPickerFrame = {
+        fields = {
+            -- 10.0 and later.
+            SetupColorPickerAndShow = {},
+            GetColorAlpha = {},
+            -- Present on both.
+            GetColorRGB = {},
+            SetColorRGB = {},
+            Show = {},
+            Hide = {},
+            -- Pre-10.0 only, and the reason this global is not read-only.
+            func = {read_only = false},
+            opacityFunc = {read_only = false},
+            cancelFunc = {read_only = false},
+            hasOpacity = {read_only = false},
+            opacity = {read_only = false},
+        },
+    },
     -- Optional, feature-detected at runtime for the LibDataBroker launcher.
     -- Must never become a TOC dependency: Titan Panel is OptionalDeps only.
     "LibStub",

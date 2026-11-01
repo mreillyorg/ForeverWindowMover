@@ -40,6 +40,34 @@ Open **Game Menu > Options > AddOns > Forever Window Mover**, or left-click the 
 
 Blizzard's **Defaults** button on the settings page resets all positions, re-enables every group, and turns MOVE handles back on.
 
+## The Handles page
+
+**Options > AddOns > Forever Window Mover > Handles** controls how windows are dragged and what the tab looks like. These settings apply to every window group at once.
+
+### Dragging
+
+| Control | Effect |
+| --- | --- |
+| **Show the MOVE tab** | The tab above each window's top-left corner. On by default. |
+| **Drag by the window's title bar** | Move a window by its own title bar, with no tab. Off by default. There is nothing to see, so hover a title bar to confirm it is active. |
+
+The two are independent: use either, both, or neither. With both off nothing is draggable, and the page says so rather than leaving you guessing. **Show MOVE handles** on the main page still overrides both.
+
+A caution on the title-bar option while 0.4.0 is in beta: the drag strip spans the top of each window. It is kept clear of the close button and real buttons keep priority, but this has not been confirmed against every window in the client. If a close button stops responding, switch the option off and report which window it was.
+
+### Tab appearance
+
+| Style | Looks like |
+| --- | --- |
+| **Dark** | The original flat dark tab. The default. |
+| **Blizzard** | A bordered tab matching the game's tooltips. |
+| **Minimal** | A small grip with no text, for the least clutter. |
+| **Custom** | Your own colours and size. |
+
+For **Custom**, the controls below the style list set the background and hover colours, whether the **MOVE** label is shown (off gives a grip instead), and the width and height. They stay usable whichever style is selected, so you can set a custom tab up before switching to it. Sizes are clamped, so you cannot accidentally make a handle too small to click.
+
+Blizzard's **Defaults** button on this page restores the tab, turns the title-bar option off and sets the style back to **Dark**. It does not touch your saved window positions.
+
 All controls are disabled while you are in combat lockdown, and the status line says so. If you are looking at the page when combat ends, the controls come back on their own within a fraction of a second.
 
 ## Resetting vs disabling

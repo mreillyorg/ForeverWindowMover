@@ -6,7 +6,7 @@ These functions live on the private addon table shared by the three Lua files (`
 
 | Field | Type | Notes |
 | --- | --- | --- |
-| `addon.version` | `string` | `"0.3.4"`. Display only. The `.toc` `## Version` is the source of truth; `tools/build.ps1` fails if the two disagree. |
+| `addon.version` | `string` | `"0.4.0-beta"`. Display only. The `.toc` `## Version` is the source of truth; `tools/build.ps1` fails if the two disagree. |
 | `addon.author` | `string` | `"Michael Reilly"`. |
 | `addon.website` | `string` | GitHub URL shown in the options panel edit box and the Titan tooltip. |
 | `addon.groups` | `array` | Ordered list of `{key, label, frames}`. Drives options rows, tooltip lines, discovery, and reset. See [supported windows](supported-windows.md). |
@@ -20,7 +20,25 @@ Whether dragging is enabled for a group. Defaults to `true` when `db` or `db.ena
 `true` if any frame in the group has a stored position. Returns `false` for unknown keys or before saved variables load.
 
 ### `addon.HandlesVisible() -> boolean`
-Global MOVE-tab visibility. Defaults to `true`. Deliberately independent of the per-group enable flags — hiding handles never erases positions or changes `db.enabled`.
+The master switch, and what Titan's right-click toggles. Defaults to `true`. Deliberately independent of the per-group enable flags — hiding handles never erases positions or changes `db.enabled`. It also sits above both drag mechanisms: with this `false`, neither is live.
+
+### `addon.TabEnabled() -> boolean`
+Whether the visible MOVE tab is one of the drag mechanisms. Defaults to `true`.
+
+### `addon.TitlebarEnabled() -> boolean`
+Whether the invisible title-bar strip is live. Defaults to `false`, because an invisible control is not discoverable and so should be opted into.
+
+### `addon.NothingDraggable() -> boolean`
+`true` when the master switch is on but neither mechanism is, which is a legal state that leaves nothing movable. The Handles page reports it rather than letting the user wonder.
+
+### `addon.HandleStyleName() -> string`
+The selected style name, always one of `dark`, `blizzard`, `minimal` or `custom`. An unrecognised value on disk resolves to `dark` rather than leaving the tab unstyled.
+
+### `addon.HandleStyle() -> table`
+The resolved style: `{label, width, height, text, bg, hover, backdrop?, grip?}`. For `custom` this is built by `addon.CustomStyle()`.
+
+### `addon.CustomStyle() -> table`
+The `custom` style built from `db.handleCustom`, validating each field and falling back **per field**. A hand-edited saved file therefore cannot produce an invisible or zero-sized handle. `text` is tri-state on disk: absent means the default label, `false` means no label.
 
 ### `addon.CanChangeFrames() -> boolean`
 Alias of the internal `CanMove()`. `false` during combat lockdown. Used by the options panel to grey out controls.

@@ -121,6 +121,74 @@ MUTATIONS = [
      '',
      'tests/options.lua'),
 
+    ('the nothing-draggable warning never shown',
+     'Options.lua',
+     '''        warning:SetText(addon.NothingDraggable()
+            and "Nothing is draggable: switch on the tab, the title bar, or both."
+            or "")''',
+     '        warning:SetText("")',
+     'tests/handlepage.lua'),
+
+    ('style checkboxes stop behaving as a radio group',
+     'Options.lua',
+     'check:SetChecked(name == selected)',
+     'check:SetChecked(true)',
+     'tests/handlepage.lua'),
+
+    ('the colour picker result is discarded',
+     'Options.lua',
+     '''            local opened = ShowColourPicker(current, function(r, g, b, a)
+                addon.SetCustomStyle(field, {r, g, b, a})
+                RunRefreshers()
+            end)''',
+     '''            local opened = ShowColourPicker(current, function()
+                RunRefreshers()
+            end)''',
+     'tests/handlepage.lua'),
+
+    ('picker alpha ignored, so every custom colour is opaque',
+     'Options.lua',
+     'if ok and type(nr) == "number" then apply(nr, ng, nb, currentAlpha()) end',
+     'if ok and type(nr) == "number" then apply(nr, ng, nb, 1) end',
+     'tests/handlepage.lua'),
+
+    ('cancelling the colour picker keeps the discarded colour',
+     'Options.lua',
+     '''    local function onCancel()
+        apply(r, g, b, a)
+    end''',
+     '''    local function onCancel()
+    end''',
+     'tests/handlepage.lua'),
+
+    ('size steppers no longer clamped, so a zero-width tab is reachable',
+     'Options.lua',
+     '''                if value < minimum then value = minimum end
+                if value > maximum then value = maximum end''',
+     '',
+     'tests/handlepage.lua'),
+
+    ('the Handles page never registered, so the settings are unreachable',
+     'Options.lua',
+     '''    if not addon.handlePanel then
+        addon.handlePanel = BuildHandlePage()
+    end''',
+     '',
+     'tests/handlepage.lua'),
+
+    ('subcategory failure no longer falls back to a top-level entry',
+     'Options.lua',
+     '''    if not nested then
+        local ok, standalone = pcall(Settings.RegisterCanvasLayoutCategory,
+            addon.handlePanel, "Forever Window Mover: handles")
+        if ok and standalone then
+            pcall(Settings.RegisterAddOnCategory, standalone)
+            addon.handleCategory = standalone
+        end
+    end''',
+     '',
+     'tests/handlepage.lua'),
+
     ('OpenOptions back to accepting only numeric category ids',
      'Options.lua',
      'if not ok or (type(id) ~= "number" and type(id) ~= "string") then return false end',

@@ -270,9 +270,13 @@ function wow.reset()
     wow.named = {UIParent = true}
     _G.GameTooltip.lines = {}
     _G.DEFAULT_CHAT_FRAME.messages = {}
+    wow.subcategories = true
     -- Opt-in globals, so each case starts from "the client does not have it".
     _G.Settings = nil
     _G.LibStub = nil
+    _G.ColorPickerFrame = nil
+    _G.ShowUIPanel = nil
+    _G.OpacitySliderFrame = nil
 end
 
 -- --- globals the addon reads ------------------------------------------------
@@ -283,6 +287,48 @@ _G.UIParent.top = SCREEN_HEIGHT
 -- Set false to simulate a build before 9.0, where asking for BackdropTemplate
 -- fails outright. The addon wraps that CreateFrame in pcall for exactly this.
 wow.backdropTemplate = true
+-- Set false to simulate a build with no RegisterCanvasLayoutSubcategory, where
+-- the Handles page has to fall back to its own top-level entry. Read when
+-- wow.installSettings runs, so set it before then.
+wow.subcategories = true
+
+-- Colour picker. Installed on demand like Settings, because the addon
+-- feature-detects it and reports a missing one to the user rather than erroring.
+-- `modern` picks between the 10.0 SetupColorPickerAndShow API and the older
+-- field-assignment form; both are supported by the addon.
+function wow.installColorPicker(modern)
+    local picker = {opened = 0, r = 0, g = 0, b = 0, alpha = 1}
+    function picker:GetColorRGB() return self.r, self.g, self.b end
+    function picker:GetColorAlpha() return self.alpha end
+    function picker:SetColorRGB(r, g, b) self.r, self.g, self.b = r, g, b end
+    function picker:Hide() end
+    function picker:Show() self.opened = self.opened + 1 end
+
+    if modern then
+        function picker:SetupColorPickerAndShow(info)
+            self.opened = self.opened + 1
+            self.info = info
+            self.r, self.g, self.b = info.r, info.g, info.b
+            self.alpha = 1 - (info.opacity or 0)
+        end
+    end
+    -- Drives the picker as a user would: move to a colour, then accept.
+    function picker:Choose(r, g, b, a)
+        self.r, self.g, self.b, self.alpha = r, g, b, a
+        local change = (self.info and self.info.swatchFunc) or self.func
+        assert(change, "the picker was never given a change callback")
+        change()
+    end
+    function picker:Cancel()
+        local cancel = (self.info and self.info.cancelFunc) or self.cancelFunc
+        assert(cancel, "the picker was never given a cancel callback")
+        cancel()
+    end
+
+    _G.ColorPickerFrame = picker
+    _G.ShowUIPanel = function(frame) frame:Show() end
+    return picker
+end
 
 _G.CreateFrame = function(kind, name, parent, template)
     if template == "BackdropTemplate" and not wow.backdropTemplate then
@@ -342,6 +388,14 @@ function wow.installSettings(categoryId)
             return category
         end,
         RegisterAddOnCategory = function(category) category.inAddOnList = true end,
+        -- Present only when wow.subcategories is true, so a harness can also
+        -- exercise the fallback to a second top-level entry.
+        RegisterCanvasLayoutSubcategory = wow.subcategories and function(parent, panel, name)
+            local subcategory = {name = name, panel = panel, parent = parent, id = 99}
+            function subcategory:GetID() return self.id end
+            registered[#registered + 1] = subcategory
+            return subcategory
+        end or nil,
         OpenToCategory = function(id)
             _G.Settings.opened[#_G.Settings.opened + 1] = id
             return true

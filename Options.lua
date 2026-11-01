@@ -86,6 +86,70 @@ local function Text(panel, template, y, x)
     return text
 end
 
+-- Panels register a refresher here so the core's single addon.RefreshOptions
+-- call reaches every page. Each one checks its own panel's visibility.
+local refreshers = {}
+
+local function RunRefreshers()
+    for _, refresh in ipairs(refreshers) do refresh() end
+end
+
+-- Opens the colour picker on `colour` and calls back with r, g, b, a.
+--
+-- The API changed in 10.0: SetupColorPickerAndShow takes an info table, while
+-- before that you set fields on ColorPickerFrame and showed it yourself. Both
+-- are supported because the addon has to load on either, and reading the alpha
+-- back differs too -- GetColorAlpha on current builds, OpacitySliderFrame
+-- before it. Returns false if there is no usable picker at all.
+local function ShowColourPicker(colour, apply)
+    local picker = ColorPickerFrame
+    if not picker then return false end
+
+    local r, g, b, a = colour[1], colour[2], colour[3], colour[4] or 1
+    -- The picker reports opacity, which is the inverse of alpha.
+    local function currentAlpha()
+        if type(picker.GetColorAlpha) == "function" then
+            local ok, value = pcall(picker.GetColorAlpha, picker)
+            if ok and type(value) == "number" then return value end
+        end
+        if OpacitySliderFrame and type(OpacitySliderFrame.GetValue) == "function" then
+            local ok, value = pcall(OpacitySliderFrame.GetValue, OpacitySliderFrame)
+            if ok and type(value) == "number" then return 1 - value end
+        end
+        return a
+    end
+    local function onChange()
+        local ok, nr, ng, nb = pcall(picker.GetColorRGB, picker)
+        if ok and type(nr) == "number" then apply(nr, ng, nb, currentAlpha()) end
+    end
+    local function onCancel()
+        apply(r, g, b, a)
+    end
+
+    if type(picker.SetupColorPickerAndShow) == "function" then
+        return (pcall(picker.SetupColorPickerAndShow, picker, {
+            r = r, g = g, b = b, opacity = 1 - a, hasOpacity = true,
+            swatchFunc = onChange, opacityFunc = onChange, cancelFunc = onCancel,
+        }))
+    end
+
+    -- Pre-10.0: assign the callbacks, seed the colour, then show the frame.
+    return (pcall(function()
+        picker.func = onChange
+        picker.opacityFunc = onChange
+        picker.cancelFunc = onCancel
+        picker.hasOpacity = true
+        picker.opacity = 1 - a
+        picker:SetColorRGB(r, g, b)
+        picker:Hide() -- forces OnShow to run again if it was already open
+        if type(ShowUIPanel) == "function" then
+            ShowUIPanel(picker)
+        else
+            picker:Show()
+        end
+    end))
+end
+
 function addon.OpenOptions()
     -- The settings page is normally registered at login, but can also be
     -- initialized on demand if Blizzard's settings UI loaded later.
@@ -102,6 +166,235 @@ function addon.OpenOptions()
     -- Accept either rather than silently falling back to the chat hint.
     if not ok or (type(id) ~= "number" and type(id) ~= "string") then return false end
     return (pcall(Settings.OpenToCategory, id))
+end
+
+-- The Handles page: which drag mechanisms are live, and what the tab looks
+-- like. A separate page rather than more rows on the main one, because the
+-- window list already comes to 552px against a settings canvas that does not
+-- scroll. See docs/development.md.
+local function BuildHandlePage()
+    local panel = CreateFrame("Frame", nil, UIParent)
+    panel.name = "Handles"
+
+    local cursor = NewCursor()
+    local status
+    local rows = {}
+    local styleChecks = {}
+    local swatches = {}
+    local sizeLabels = {}
+    local labelCheck, warning
+
+    local function SetStatus(text) status:SetText(text) end
+
+    Text(panel, "GameFontNormalLarge", cursor:Place(LAYOUT.titleLine))
+        :SetText("Forever Window Mover: handles")
+
+    local intro = Text(panel, "GameFontHighlightSmall", cursor:Place(LAYOUT.textLine * 2))
+    intro:SetWidth(ContentWidth())
+    intro:SetText("Choose how windows are dragged, and what the MOVE tab looks like. "
+        .. "These settings apply to every window group.")
+
+    cursor:Skip(LAYOUT.lineGap)
+    Text(panel, "GameFontNormal", cursor:Place(LAYOUT.headingLine)):SetText("Dragging")
+
+    -- The two mechanisms.
+    local function mechanism(labelText, note, getter, setter)
+        local y = cursor:Place(LAYOUT.checkHeight, 2)
+        local check = CreateFrame("CheckButton", nil, panel, "UICheckButtonTemplate")
+        check:SetPoint("TOPLEFT", LAYOUT.checkInset, y)
+        local caption = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+        caption:SetPoint("LEFT", check, "RIGHT", LAYOUT.inlineGap, 0)
+        caption:SetText(labelText)
+
+        local hint = Text(panel, "GameFontDisableSmall", cursor:Place(LAYOUT.textLine),
+            LAYOUT.checkInset + 26)
+        hint:SetWidth(ContentWidth() - 26)
+        hint:SetText(note)
+
+        check:SetScript("OnClick", function(self)
+            if setter(not not self:GetChecked()) then
+                SetStatus(labelText .. (self:GetChecked() and " enabled." or " disabled."))
+            else
+                SetStatus("Cannot change handles during combat.")
+            end
+            RunRefreshers()
+        end)
+        rows[#rows + 1] = {check = check, getter = getter}
+        return check
+    end
+
+    mechanism("Show the MOVE tab",
+        "A small tab above each window's top-left corner.",
+        addon.TabEnabled, addon.SetTabEnabled)
+    mechanism("Drag by the window's title bar",
+        "No tab: drag the window by its own title bar. There is nothing to see, "
+        .. "so hover the title bar to confirm it is active.",
+        addon.TitlebarEnabled, addon.SetTitlebarEnabled)
+
+    warning = Text(panel, "GameFontRedSmall", cursor:Place(LAYOUT.textLine))
+    warning:SetWidth(ContentWidth())
+    warning:SetText("")
+
+    cursor:Skip(LAYOUT.lineGap)
+    Text(panel, "GameFontNormal", cursor:Place(LAYOUT.headingLine)):SetText("Tab appearance")
+
+    -- Style selection. Checkbuttons used as a radio group: Refresh keeps
+    -- exactly one checked, so there is no separate radio template to depend on.
+    for _, name in ipairs(addon.handleStyleOrder) do
+        local style = name == "custom" and addon.CustomStyle() or addon.handleStyles[name]
+        local y = cursor:Place(LAYOUT.checkHeight, 2)
+        local check = CreateFrame("CheckButton", nil, panel, "UICheckButtonTemplate")
+        check:SetPoint("TOPLEFT", LAYOUT.checkInset, y)
+        local caption = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+        caption:SetPoint("LEFT", check, "RIGHT", LAYOUT.inlineGap, 0)
+        caption:SetText(style.label)
+
+        check:SetScript("OnClick", function()
+            if addon.SetHandleStyle(name) then
+                SetStatus(style.label .. " tab style selected.")
+            else
+                SetStatus("Cannot change the tab style during combat.")
+            end
+            RunRefreshers()
+        end)
+        styleChecks[name] = check
+    end
+
+    cursor:Skip(LAYOUT.lineGap)
+    Text(panel, "GameFontNormal", cursor:Place(LAYOUT.headingLine))
+        :SetText("Custom tab (used when Custom is selected above)")
+
+    -- Both colour swatches on one row, to keep the page inside the canvas.
+    local swatchY = cursor:Place(LAYOUT.checkHeight)
+    local function swatch(field, caption, offsetX)
+        local button = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
+        button:SetSize(118, 22)
+        button:SetPoint("TOPLEFT", offsetX, swatchY)
+        button:SetText(caption)
+        local chip = button:CreateTexture(nil, "OVERLAY")
+        chip:SetSize(14, 14)
+        chip:SetPoint("RIGHT", button, "RIGHT", -6, 0)
+        button:SetScript("OnClick", function()
+            local current = addon.CustomStyle()[field]
+            local opened = ShowColourPicker(current, function(r, g, b, a)
+                addon.SetCustomStyle(field, {r, g, b, a})
+                RunRefreshers()
+            end)
+            if not opened then
+                SetStatus("This build has no colour picker; edit handleCustom in the "
+                    .. "saved variables instead.")
+            end
+        end)
+        swatches[field] = {button = button, chip = chip}
+    end
+    swatch("bg", "Background", LAYOUT.padding)
+    swatch("hover", "Hover", LAYOUT.padding + 130)
+
+    local labelY = cursor:Place(LAYOUT.checkHeight, 2)
+    labelCheck = CreateFrame("CheckButton", nil, panel, "UICheckButtonTemplate")
+    labelCheck:SetPoint("TOPLEFT", LAYOUT.checkInset, labelY)
+    local labelCaption = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+    labelCaption:SetPoint("LEFT", labelCheck, "RIGHT", LAYOUT.inlineGap, 0)
+    labelCaption:SetText("Show the MOVE label (off gives a grip instead)")
+    labelCheck:SetScript("OnClick", function(self)
+        if addon.SetCustomStyle("text", not not self:GetChecked()) then
+            SetStatus("Custom tab label updated.")
+        else
+            SetStatus("Cannot change the tab style during combat.")
+        end
+        RunRefreshers()
+    end)
+
+    -- Size steppers rather than sliders: OptionsSliderTemplate is not present
+    -- on every build, and a failed CreateFrame would take the whole page with
+    -- it. Buttons use a template this file already relies on.
+    local sizeY = cursor:Place(LAYOUT.checkHeight)
+    local function stepper(field, caption, step, minimum, maximum, offsetX)
+        local text = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+        text:SetPoint("TOPLEFT", offsetX, sizeY - 4)
+        text:SetText(caption)
+
+        local function nudge(delta, x)
+            local button = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
+            button:SetSize(24, 22)
+            button:SetPoint("TOPLEFT", x, sizeY)
+            button:SetText(delta > 0 and "+" or "-")
+            button:SetScript("OnClick", function()
+                local value = addon.CustomStyle()[field] + delta
+                if value < minimum then value = minimum end
+                if value > maximum then value = maximum end
+                if not addon.SetCustomStyle(field, value) then
+                    SetStatus("Cannot resize the tab during combat.")
+                end
+                RunRefreshers()
+            end)
+            return button
+        end
+        nudge(-step, offsetX + 58)
+        local value = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+        value:SetPoint("TOPLEFT", offsetX + 86, sizeY - 4)
+        value:SetWidth(30)
+        value:SetJustifyH("CENTER")
+        nudge(step, offsetX + 118)
+        sizeLabels[field] = value
+    end
+    stepper("width", "Width", 5, 20, 200, LAYOUT.padding)
+    stepper("height", "Height", 2, 12, 60, LAYOUT.padding + 160)
+
+    cursor:Skip()
+    status = Text(panel, "GameFontHighlightSmall", cursor:Place(LAYOUT.statusHeight, 0))
+    status:SetWidth(ContentWidth())
+    status:SetText("")
+
+    panel:SetSize(LAYOUT.width, cursor:Height())
+
+    local function Refresh()
+        local canChange = addon.CanChangeFrames()
+        for _, row in ipairs(rows) do
+            row.check:SetChecked(row.getter())
+            row.check:SetEnabled(canChange)
+        end
+        warning:SetText(addon.NothingDraggable()
+            and "Nothing is draggable: switch on the tab, the title bar, or both."
+            or "")
+
+        local selected = addon.HandleStyleName()
+        for name, check in pairs(styleChecks) do
+            check:SetChecked(name == selected)
+            check:SetEnabled(canChange)
+        end
+
+        -- The custom controls stay usable whichever style is selected, so you
+        -- can set a custom tab up before switching to it.
+        local custom = addon.CustomStyle()
+        for field, parts in pairs(swatches) do
+            local colour = custom[field]
+            parts.chip:SetColorTexture(colour[1], colour[2], colour[3], colour[4])
+            parts.button:SetEnabled(canChange)
+        end
+        labelCheck:SetChecked(custom.text ~= nil)
+        labelCheck:SetEnabled(canChange)
+        for field, label in pairs(sizeLabels) do
+            label:SetText(tostring(custom[field]))
+        end
+    end
+
+    panel.OnRefresh = Refresh
+    panel.OnCommit = function() end
+    panel.OnDefault = function()
+        if not (addon.SetTabEnabled(true) and addon.SetTitlebarEnabled(false)
+            and addon.SetHandleStyle("dark")) then
+            SetStatus("Cannot restore defaults during combat.")
+            return
+        end
+        SetStatus("Handle settings restored to defaults.")
+        RunRefreshers()
+    end
+    panel:SetScript("OnShow", Refresh)
+    refreshers[#refreshers + 1] = function()
+        if panel:IsShown() then Refresh() end
+    end
+    return panel
 end
 
 function addon.CreateOptions()
@@ -327,14 +620,41 @@ function addon.CreateOptions()
             if not lastCanChange then SetStatus(combatNotice) end
             Refresh()
         end)
-        addon.RefreshOptions = function()
+        refreshers[#refreshers + 1] = function()
             if panel:IsShown() then Refresh() end
         end
+        addon.RefreshOptions = RunRefreshers
         addon.optionsPanel = panel
+    end
+
+    if not addon.handlePanel then
+        addon.handlePanel = BuildHandlePage()
     end
 
     local category = Settings.RegisterCanvasLayoutCategory(addon.optionsPanel, addon.optionsPanel.name)
     Settings.RegisterAddOnCategory(category)
     addon.optionsCreated = true
     addon.optionsCategory = category
+
+    -- Nested under the main entry where the API allows it. On a build without
+    -- RegisterCanvasLayoutSubcategory, fall back to a second top-level entry:
+    -- less tidy in the list, but the settings stay reachable, which matters
+    -- more than where they sit.
+    local nested = false
+    if type(Settings.RegisterCanvasLayoutSubcategory) == "function" then
+        local ok, subcategory = pcall(Settings.RegisterCanvasLayoutSubcategory,
+            category, addon.handlePanel, addon.handlePanel.name)
+        if ok and subcategory then
+            addon.handleCategory = subcategory
+            nested = true
+        end
+    end
+    if not nested then
+        local ok, standalone = pcall(Settings.RegisterCanvasLayoutCategory,
+            addon.handlePanel, "Forever Window Mover: handles")
+        if ok and standalone then
+            pcall(Settings.RegisterAddOnCategory, standalone)
+            addon.handleCategory = standalone
+        end
+    end
 end

@@ -280,8 +280,8 @@ That empties the index so every file is re-written through the new attributes.
 Releases are built and published by the [BigWigs packager](https://github.com/BigWigsMods/packager) from `.github/workflows/release.yml`. The whole flow is driven by pushing a tag:
 
 ```powershell
-git tag -a v0.3.4 -m "Forever Window Mover 0.3.4"
-git push origin v0.3.4
+git tag -a v0.4.0-beta -m "Forever Window Mover 0.4.0-beta"
+git push origin v0.4.0-beta
 ```
 
 The workflow runs, in order: the Lua 5.1 install, the quality gate, `tools/build.ps1 -Check`, a packager build with `-d` so nothing uploads, `tools/check_package.py` against that build, the artifact upload, and finally -- **only on a tag** -- a second packager run with uploading enabled, which creates the GitHub release with `CHANGELOG.md` as the notes and publishes to CurseForge project **1737408** (from `## X-Curse-Project-ID` in the `.toc`).

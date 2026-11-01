@@ -6,6 +6,31 @@ Author: Michael Reilly · Source / issues: https://github.com/mreillyorg/Forever
 
 Release dates are not recorded in the repository history, so versions are listed newest-first without dates.
 
+## 0.4.0-beta
+
+Handle appearance and a second way to drag. Shipping as a **beta** because the title-bar option changes how mouse input reaches Blizzard's windows, and that is the one part of it no amount of offline testing can confirm — see the note at the end.
+
+Saved positions and the saved-position format are unchanged, and the defaults reproduce 0.3.4 exactly: if you change nothing, nothing changes.
+
+Added
+
+- **Four tab styles**, on a new **Options > AddOns > Forever Window Mover > Handles** page. *Dark* is the existing look and the default. *Blizzard* adds a tooltip-style border. *Minimal* is a small grip with no label, for when a 70px MOVE tab is more than you want on screen. *Custom* is yours: pick the background and hover colours, turn the label off, and set the width and height.
+- **Drag by the window's title bar.** No tab at all — grab the window by its own title bar, the way most windows work. Off by default, because an invisible control is not discoverable; hover a title bar to confirm it is active.
+- The tab and the title-bar option are independent, so you can have either, both, or neither. With both off the Handles page says so rather than leaving you to wonder why nothing moves.
+- **Show MOVE handles** remains the master switch, including from Titan's right-click, and still overrides both.
+
+Changed
+
+- The MOVE tab's screen-top flip now measures against the selected style's height, so a shorter tab flips later than a taller one.
+
+Unchanged
+
+- `ForeverWindowMoverDB`'s position format, the group list and the group keys. The four new fields are all additive and absent-means-default, so a saved file from any earlier version loads as-is and an upgrade changes nothing you had not asked for.
+
+Known limitation
+
+- With the title-bar option enabled, the drag strip sits across the top of each window. It is inset 40px from the right to clear the close button and sits at the window's own frame level so real buttons keep priority, but **this has not been confirmed against every supported window in the client**. If a close button or a control near the top of a window stops responding, switch the title-bar option off and please report which window it was.
+
 ## 0.3.4
 
 The first release published through CurseForge. **No Lua in the addon changed**, so in-game behaviour, the group list and the `ForeverWindowMoverDB` format are identical to 0.3.2.

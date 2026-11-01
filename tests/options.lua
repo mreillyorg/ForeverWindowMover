@@ -62,7 +62,11 @@ do
     local panel = addon.optionsPanel
     assert(panel, "no options panel was built")
     assert(panel.name == "Forever Window Mover", "panel name is what shows in the list")
-    assert(#_G.Settings.registered == 1, "exactly one canvas category should be registered")
+    -- Two categories: this page, and the Handles page nested under it. The
+    -- main one is registered first. tests/handlepage.lua covers the second.
+    assert(#_G.Settings.registered == 2, string.format(
+        "expected the main category plus the Handles subcategory, got %d",
+        #_G.Settings.registered))
     assert(_G.Settings.registered[1].inAddOnList, "category must be added to the AddOns list")
     assert(addon.optionsCategory == _G.Settings.registered[1], "category not recorded on addon")
 
