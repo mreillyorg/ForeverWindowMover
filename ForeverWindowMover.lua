@@ -24,9 +24,58 @@ addon.groups = {
 local groupsByKey = {}
 for _, group in ipairs(addon.groups) do groupsByKey[group.key] = group end
 
-local HANDLE_WIDTH = 70
-local HANDLE_HEIGHT = 20
 local HANDLE_INSET_X = 18
+
+-- The invisible drag strip over a window's own title bar, for people who would
+-- rather not have a MOVE tab at all.
+--
+-- There is no portable title-bar object to hook: MerchantFrame's title is a
+-- FontString, which cannot take mouse input, and only some of the newer frames
+-- expose a TitleContainer. So this is a strip of our own, stretched across the
+-- top of the window.
+--
+-- RIGHT_INSET keeps it clear of the close button, which sits top-right on every
+-- frame in addon.groups. The strip also takes the window's OWN frame level
+-- rather than the +12 the tab uses, so a genuine interactive child still wins
+-- the click. Belt and braces, because swallowing a close button is the one way
+-- this feature could be worse than no feature.
+local TITLEBAR_HEIGHT = 24
+local TITLEBAR_RIGHT_INSET = 40
+
+-- Tab appearance presets. `minimal` is drawn rather than textured: a Blizzard
+-- texture path that does not exist on this build fails silently, and an invisible
+-- handle is indistinguishable from a broken addon.
+addon.handleStyles = {
+    dark = {
+        label = "Dark",
+        width = 70, height = 20, text = "MOVE",
+        bg = {0.06, 0.09, 0.13, 0.93},
+        hover = {0.12, 0.25, 0.34, 0.97},
+    },
+    blizzard = {
+        label = "Blizzard",
+        width = 70, height = 22, text = "MOVE",
+        bg = {0.09, 0.09, 0.19, 0.95},
+        hover = {0.20, 0.20, 0.40, 0.98},
+        backdrop = true,
+    },
+    minimal = {
+        label = "Minimal",
+        width = 22, height = 16, text = nil,
+        bg = {0.00, 0.00, 0.00, 0.55},
+        hover = {0.35, 0.60, 0.85, 0.85},
+        grip = true,
+    },
+}
+-- Order for the options page, so it does not depend on table iteration order.
+addon.handleStyleOrder = {"dark", "blizzard", "minimal", "custom"}
+
+local DEFAULT_CUSTOM = {
+    label = "Custom",
+    width = 70, height = 20, text = "MOVE",
+    bg = {0.10, 0.10, 0.10, 0.90},
+    hover = {0.45, 0.45, 0.45, 0.95},
+}
 
 -- Frame discovery runs as a short burst rather than a permanent OnUpdate.
 -- See StartScan for why stopping is safe.
@@ -66,10 +115,70 @@ function addon.HasPosition(key)
     return false
 end
 
--- This switch is separate from the per-window enable flags. Turning all
--- handles off does not erase positions or alter which groups are enabled.
+-- The master switch, and the one Titan's right-click toggles. Separate from the
+-- per-window enable flags: turning all handles off does not erase positions or
+-- alter which groups are enabled. It also sits above the two mechanisms below --
+-- with this off, neither the tab nor the title-bar strip is live.
 function addon.HandlesVisible()
     return not db or db.showHandles ~= false
+end
+
+-- The two drag mechanisms, independently toggleable. The tab is on by default
+-- because it is discoverable; the title-bar strip is invisible, so opting in is
+-- the right way round.
+function addon.TabEnabled()
+    return not db or db.handleTab ~= false
+end
+
+function addon.TitlebarEnabled()
+    return not not (db and db.handleTitlebar == true)
+end
+
+-- True when the master switch is on but neither mechanism is, which leaves
+-- nothing draggable. The options page says so rather than letting you wonder.
+function addon.NothingDraggable()
+    return addon.HandlesVisible() and not addon.TabEnabled() and not addon.TitlebarEnabled()
+end
+
+function addon.CustomStyle()
+    local stored = db and db.handleCustom
+    local style = {label = DEFAULT_CUSTOM.label}
+    for _, key in ipairs({"width", "height"}) do
+        local value = stored and stored[key]
+        style[key] = (type(value) == "number" and value > 0) and value or DEFAULT_CUSTOM[key]
+    end
+    -- `text` is a tri-state on disk: absent means the default, false means no
+    -- label at all, which is the whole point of a custom narrow handle.
+    if stored and stored.text == false then
+        style.text = nil
+    else
+        style.text = DEFAULT_CUSTOM.text
+    end
+    for _, key in ipairs({"bg", "hover"}) do
+        local colour = stored and stored[key]
+        if type(colour) == "table" and type(colour[1]) == "number" and type(colour[2]) == "number"
+            and type(colour[3]) == "number" then
+            style[key] = {colour[1], colour[2], colour[3],
+                          type(colour[4]) == "number" and colour[4] or 1}
+        else
+            style[key] = DEFAULT_CUSTOM[key]
+        end
+    end
+    return style
+end
+
+-- Returns the style NAME, which is always one the options page can display.
+function addon.HandleStyleName()
+    local name = db and db.handleStyle
+    if name == "custom" or addon.handleStyles[name] then return name end
+    return "dark"
+end
+
+-- Returns the resolved style TABLE, with custom built from saved variables.
+function addon.HandleStyle()
+    local name = addon.HandleStyleName()
+    if name == "custom" then return addon.CustomStyle() end
+    return addon.handleStyles[name]
 end
 
 local function RefreshBroker()
@@ -95,9 +204,10 @@ local function UpdateHandleAnchor(name)
     local info = installed[name]
     if not info then return end
     local frame, handle = info.frame, info.handle
+    local height = info.styleHeight or 20
     local top = frame:GetTop()
     local screenTop = UIParent and UIParent:GetTop()
-    local inside = top and screenTop and (top * ScaleRatio(frame) + HANDLE_HEIGHT) > screenTop
+    local inside = top and screenTop and (top * ScaleRatio(frame) + height) > screenTop
     pcall(function()
         handle:ClearAllPoints()
         if inside then
@@ -108,16 +218,77 @@ local function UpdateHandleAnchor(name)
     end)
 end
 
+-- Applies the current style to one installed tab. Every visual property lives
+-- here so a style change needs no reinstall, which matters because frames
+-- cannot be re-created once Blizzard has made them.
+local function ApplyHandleStyle(name)
+    local info = installed[name]
+    if not info then return end
+    local style = addon.HandleStyle()
+    info.styleHeight = style.height
+
+    pcall(function()
+        info.handle:SetSize(style.width, style.height)
+        info.background:SetColorTexture(style.bg[1], style.bg[2], style.bg[3], style.bg[4])
+
+        -- A label, or nothing. `minimal` and a text-less custom style use the
+        -- grip dots instead, which are drawn rather than loaded from a texture
+        -- path that might not exist on this build.
+        if style.text then
+            info.label:SetText(style.text)
+            info.label:Show()
+        else
+            info.label:SetText("")
+            info.label:Hide()
+        end
+        -- Grip dots stand in for the label whenever there is no label, so a
+        -- text-less custom style does not end up as a blank rectangle.
+        local showGrip = style.grip or not style.text
+        for _, dot in ipairs(info.grip) do
+            if showGrip then dot:Show() else dot:Hide() end
+        end
+
+        -- SetBackdrop only exists on a frame created with BackdropTemplate, and
+        -- that template only exists from 9.0 onward, so both are checked.
+        if info.handle.SetBackdrop then
+            if style.backdrop then
+                info.handle:SetBackdrop({
+                    bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+                    edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+                    edgeSize = 12,
+                    insets = {left = 3, right = 3, top = 3, bottom = 3},
+                })
+                info.handle:SetBackdropColor(style.bg[1], style.bg[2], style.bg[3], style.bg[4])
+                info.background:Hide()
+            else
+                info.handle:SetBackdrop(nil)
+                info.background:Show()
+            end
+        end
+    end)
+    UpdateHandleAnchor(name)
+end
+
 local function UpdateHandles()
     for _, group in ipairs(addon.groups) do
         for _, name in ipairs(group.frames) do
             local info = installed[name]
             if info then
-                if addon.HandlesVisible() and addon.IsEnabled(group.key) then
-                    UpdateHandleAnchor(name)
+                local live = addon.HandlesVisible() and addon.IsEnabled(group.key)
+                if live and addon.TabEnabled() then
+                    ApplyHandleStyle(name)
                     info.handle:Show()
                 else
                     info.handle:Hide()
+                end
+                -- The strip has no visuals, so showing it is purely about
+                -- whether it accepts mouse input.
+                if info.titlebar then
+                    if live and addon.TitlebarEnabled() then
+                        info.titlebar:Show()
+                    else
+                        info.titlebar:Hide()
+                    end
                 end
             end
         end
@@ -130,6 +301,47 @@ function addon.SetHandlesVisible(visible)
     UpdateHandles()
     if addon.RefreshOptions then addon.RefreshOptions() end
     RefreshBroker()
+    return true
+end
+
+function addon.SetTabEnabled(enabled)
+    if not db or not CanMove() then return false end
+    db.handleTab = enabled and true or false
+    UpdateHandles()
+    if addon.RefreshOptions then addon.RefreshOptions() end
+    return true
+end
+
+function addon.SetTitlebarEnabled(enabled)
+    if not db or not CanMove() then return false end
+    db.handleTitlebar = enabled and true or false
+    UpdateHandles()
+    if addon.RefreshOptions then addon.RefreshOptions() end
+    return true
+end
+
+function addon.SetHandleStyle(name)
+    if not db or not CanMove() then return false end
+    if name ~= "custom" and not addon.handleStyles[name] then return false end
+    db.handleStyle = name
+    UpdateHandles()
+    if addon.RefreshOptions then addon.RefreshOptions() end
+    return true
+end
+
+-- Writes one field of the custom style. Kept field-at-a-time so the colour
+-- picker and the text checkbox can each save independently without having to
+-- round-trip the whole table.
+function addon.SetCustomStyle(field, value)
+    if not db or not CanMove() then return false end
+    local allowed = {bg = "table", hover = "table", text = "boolean",
+                     width = "number", height = "number"}
+    if type(value) ~= allowed[field] then return false end
+    if allowed[field] == "number" and (value <= 0 or value > 400) then return false end
+    db.handleCustom = type(db.handleCustom) == "table" and db.handleCustom or {}
+    db.handleCustom[field] = value
+    UpdateHandles()
+    if addon.RefreshOptions then addon.RefreshOptions() end
     return true
 end
 
@@ -223,22 +435,51 @@ local function InstallFrame(name, groupKey, label)
     end)
     if not ok then return end
 
-    local handle = CreateFrame("Button", nil, frame)
-    handle:SetSize(HANDLE_WIDTH, HANDLE_HEIGHT)
+    -- BackdropTemplate is what provides SetBackdrop from 9.0 onward. Asking for
+    -- a template the build does not have would fail the whole CreateFrame, so
+    -- fall back to a plain Button and let ApplyHandleStyle skip the backdrop.
+    local handle
+    local okTemplate = pcall(function()
+        handle = CreateFrame("Button", nil, frame, "BackdropTemplate")
+    end)
+    if not okTemplate or not handle then
+        handle = CreateFrame("Button", nil, frame)
+    end
     handle:SetPoint("BOTTOMLEFT", frame, "TOPLEFT", HANDLE_INSET_X, 0)
     handle:SetFrameLevel(frame:GetFrameLevel() + 12)
     handle:EnableMouse(true)
 
     local background = handle:CreateTexture(nil, "BACKGROUND")
     background:SetAllPoints()
-    background:SetColorTexture(0.06, 0.09, 0.13, 0.93)
 
     local labelText = handle:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     labelText:SetPoint("CENTER", handle, "CENTER", 0, 0)
-    labelText:SetText("MOVE")
+
+    -- Three dots for the text-less styles. Drawn, not textured, so there is no
+    -- asset path that could be missing on a given build.
+    local grip = {}
+    for index = 1, 3 do
+        local dot = handle:CreateTexture(nil, "OVERLAY")
+        dot:SetSize(2, 2)
+        dot:SetColorTexture(0.85, 0.85, 0.85, 0.9)
+        dot:SetPoint("CENTER", handle, "CENTER", (index - 2) * 5, 0)
+        dot:Hide()
+        grip[index] = dot
+    end
+
+    local function Hover(entering)
+        local style = addon.HandleStyle()
+        local colour = entering and style.hover or style.bg
+        pcall(function()
+            background:SetColorTexture(colour[1], colour[2], colour[3], colour[4])
+            if handle.SetBackdropColor and style.backdrop then
+                handle:SetBackdropColor(colour[1], colour[2], colour[3], colour[4])
+            end
+        end)
+    end
 
     handle:SetScript("OnEnter", function()
-        background:SetColorTexture(0.12, 0.25, 0.34, 0.97)
+        Hover(true)
         if GameTooltip then
             GameTooltip:SetOwner(handle, "ANCHOR_TOP")
             GameTooltip:SetText("Drag to move: " .. label)
@@ -246,7 +487,7 @@ local function InstallFrame(name, groupKey, label)
         end
     end)
     handle:SetScript("OnLeave", function()
-        background:SetColorTexture(0.06, 0.09, 0.13, 0.93)
+        Hover(false)
         if GameTooltip then GameTooltip:Hide() end
     end)
 
@@ -279,9 +520,42 @@ local function InstallFrame(name, groupKey, label)
     handle:SetScript("OnDragStop", FinishMove)
     handle:SetScript("OnHide", FinishMove)
 
-    installed[name] = {frame = frame, handle = handle}
-    UpdateHandleAnchor(name)
-    if not addon.IsEnabled(groupKey) or not addon.HandlesVisible() then handle:Hide() end
+    -- The title-bar strip. Same drag handlers, no visuals. See TITLEBAR_HEIGHT
+    -- for why it is inset from the right and sits at the window's own frame
+    -- level rather than above it.
+    local titlebar
+    pcall(function()
+        titlebar = CreateFrame("Button", nil, frame)
+        titlebar:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, 0)
+        titlebar:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -TITLEBAR_RIGHT_INSET, 0)
+        titlebar:SetHeight(TITLEBAR_HEIGHT)
+        titlebar:SetFrameLevel(frame:GetFrameLevel())
+        titlebar:EnableMouse(true)
+        titlebar:RegisterForDrag("LeftButton")
+        titlebar:SetScript("OnDragStart", StartMove)
+        titlebar:SetScript("OnDragStop", FinishMove)
+        titlebar:SetScript("OnHide", FinishMove)
+        -- Invisible, so the tooltip is the only thing that tells you it is
+        -- there. Without it the feature is undiscoverable.
+        titlebar:SetScript("OnEnter", function()
+            if GameTooltip then
+                GameTooltip:SetOwner(titlebar, "ANCHOR_TOP")
+                GameTooltip:SetText("Drag to move: " .. label)
+                GameTooltip:Show()
+            end
+        end)
+        titlebar:SetScript("OnLeave", function()
+            if GameTooltip then GameTooltip:Hide() end
+        end)
+        titlebar:Hide()
+    end)
+
+    installed[name] = {frame = frame, handle = handle, titlebar = titlebar,
+                       background = background, label = labelText, grip = grip}
+    ApplyHandleStyle(name)
+    local live = addon.IsEnabled(groupKey) and addon.HandlesVisible()
+    if not (live and addon.TabEnabled()) then handle:Hide() end
+    if titlebar and live and addon.TitlebarEnabled() then titlebar:Show() end
 
     frame:HookScript("OnShow", function()
         -- Blizzard's layout has put real anchors on the frame by now, so take

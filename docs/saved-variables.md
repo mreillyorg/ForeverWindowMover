@@ -28,6 +28,13 @@ ForeverWindowMoverDB = {
         ["guildbank"] = false,
     },
     showHandles = true,
+    handleTab = true,
+    handleTitlebar = false,
+    handleStyle = "dark",
+    handleCustom = {
+        width = 70, height = 20, text = true,
+        bg = {0.1, 0.1, 0.1, 0.9}, hover = {0.45, 0.45, 0.45, 0.95},
+    },
 }
 ```
 
@@ -35,7 +42,15 @@ ForeverWindowMoverDB = {
 | --- | --- | --- | --- |
 | `positions[frameName]` | `{x = number, y = number}` | absent | Offset in UIParent units from `UIParent`'s centre to the frame's centre. See the positioning math in [architecture](architecture.md#positioning-math). |
 | `enabled[groupKey]` | `boolean` | absent, treated as enabled | Only `false` disables a group. Any other value, including `nil`, means enabled. |
-| `showHandles` | `boolean` | absent, treated as `true` | Global MOVE-tab visibility. Only `false` hides them. |
+| `showHandles` | `boolean` | absent, treated as `true` | The master switch, and the one Titan's right-click toggles. With it off neither drag mechanism is live. Only `false` hides them. |
+| `handleTab` | `boolean` | absent, treated as `true` | Whether the visible MOVE tab is one of the drag mechanisms. |
+| `handleTitlebar` | `boolean` | absent, treated as `false` | Whether the invisible strip across the window's title bar is live. Opt-in, because an invisible control is not discoverable. |
+| `handleStyle` | `string` | absent, treated as `"dark"` | `dark`, `blizzard`, `minimal` or `custom`. An unrecognised name falls back to `dark` rather than leaving the tab unstyled. |
+| `handleCustom` | `table` | absent, all defaults | The `custom` style. Every field is validated on read and falls back individually, so a hand-edited file cannot produce an invisible or zero-sized handle. `text = false` means no label, which is the point of a narrow custom handle; absent means the label is shown. |
+
+`handleTab` and `handleTitlebar` are independent, and both can be off. That
+leaves nothing draggable while the master switch is still on, which is a legal
+state the options page reports rather than leaving you to work out.
 
 ## Bootstrap and resilience
 

@@ -68,9 +68,52 @@ MUTATIONS = [
 
     ('handle no longer flips inside the frame near the screen top',
      'ForeverWindowMover.lua',
-     'local inside = top and screenTop and (top * ScaleRatio(frame) + HANDLE_HEIGHT) > screenTop',
+     'local inside = top and screenTop and (top * ScaleRatio(frame) + height) > screenTop',
      'local inside = false',
      'tests/handles.lua'),
+
+    ('flip uses a fixed height, ignoring the selected style',
+     'ForeverWindowMover.lua',
+     'local height = info.styleHeight or 20',
+     'local height = 20',
+     'tests/styles.lua'),
+
+    ('title-bar strip no longer inset from the close button',
+     'ForeverWindowMover.lua',
+     'titlebar:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -TITLEBAR_RIGHT_INSET, 0)',
+     'titlebar:SetPoint("TOPRIGHT", frame, "TOPRIGHT", 0, 0)',
+     'tests/styles.lua'),
+
+    ('title-bar strip raised above the window, swallowing real buttons',
+     'ForeverWindowMover.lua',
+     'titlebar:SetFrameLevel(frame:GetFrameLevel())',
+     'titlebar:SetFrameLevel(frame:GetFrameLevel() + 12)',
+     'tests/styles.lua'),
+
+    ('the title-bar toggle ignored, so the strip is always live',
+     'ForeverWindowMover.lua',
+     'if live and addon.TitlebarEnabled() then',
+     'if live then',
+     'tests/styles.lua'),
+
+    ('an unknown style name no longer falls back to dark',
+     'ForeverWindowMover.lua',
+     '''    if name == "custom" or addon.handleStyles[name] then return name end
+    return "dark"''',
+     '''    return name or "dark"''',
+     'tests/styles.lua'),
+
+    ('custom style no longer validates what is on disk',
+     'ForeverWindowMover.lua',
+     "        style[key] = (type(value) == \"number\" and value > 0) and value or DEFAULT_CUSTOM[key]",
+     "        style[key] = value or DEFAULT_CUSTOM[key]",
+     'tests/styles.lua'),
+
+    ('SetCustomStyle accepts any type',
+     'ForeverWindowMover.lua',
+     'if type(value) ~= allowed[field] then return false end',
+     'if allowed[field] == nil then return false end',
+     'tests/styles.lua'),
 
     ('per-group checkboxes no longer combat gated',
      'Options.lua',

@@ -28,6 +28,7 @@ ForeverWindowMover-repo/
 │   ├── positions.lua           <- save/apply unit conversion and drift
 │   ├── state.lua               <- bootstrap, mutators, anchor capture
 │   ├── handles.lua             <- MOVE tab placement and visibility
+│   ├── styles.lua              <- tab presets, custom style, title-bar strip
 │   ├── options.lua             <- panel layout and combat gating
 │   └── broker.lua              <- the optional LibDataBroker launcher
 ├── docs/                       <- this documentation, does not ship
@@ -357,6 +358,16 @@ Frame behaviour:
 - [ ] Dragging a window hard into a screen edge and releasing there ends the drag — the window does not stay attached to the cursor.
 - [ ] A window does not jump on release, and repeated drags do not creep toward the screen centre. Worth retesting with `MerchantFrame:SetScale(0.8)` applied by hand, since that is the case the scale conversion exists for.
 - [ ] A window dragged to the top of the screen still has a clickable MOVE tab, now inside its top edge.
+
+Handle appearance and the title-bar strip. The harnesses cover the state and
+geometry; these are the parts only a client can answer:
+
+- [ ] Each of the four styles looks right, and `blizzard` actually draws a border.
+- [ ] `minimal` shows three legible grip dots rather than an empty box.
+- [ ] **With the title-bar strip enabled, every window's close button still works.** This is the one real risk in the feature: the strip is inset 40px from the right and sits at the window's own frame level, but neither measure is verifiable offline.
+- [ ] With the strip enabled, clicking inside a window (vendor item list, bank slots, profession recipe list) still does what it should, and does not start a drag.
+- [ ] Hovering the strip shows the tooltip, since nothing else indicates it is there.
+- [ ] With the tab off and the strip on, windows are still movable and no tab is visible anywhere.
 - [ ] Positions survive `/reload` and a full logout.
 - [ ] Positions hold after changing UI scale or resolution.
 - [ ] A window the client only creates on first use (guild bank, auction house) resets to Blizzard's layout, not to wherever the addon last put it.

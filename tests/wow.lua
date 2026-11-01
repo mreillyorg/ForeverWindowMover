@@ -32,7 +32,7 @@ local SCREEN_WIDTH, SCREEN_HEIGHT = 800, 600
 local function noop() end
 
 -- One region type for frames, buttons, textures and font strings.
-local function newRegion(kind, name, parent)
+local function newRegion(kind, name, parent, template)
     local region = {
         kind = kind,
         name = name,
@@ -124,8 +124,14 @@ local function newRegion(kind, name, parent)
     end
 
     function region:SetAllPoints() end
-    function region:SetColorTexture() end
     function region:SetJustifyH() end
+    -- Recorded, because the handle styles are mostly colour and a harness has
+    -- no other way to tell one preset from another.
+    function region:SetColorTexture(r, g, b, a)
+        self.colour = {r, g, b, a}
+    end
+    -- SetBackdrop is attached further down, and only for a region created with
+    -- BackdropTemplate, because that is exactly the feature the addon detects.
     function region:SetFrameLevel(v) self.level = v end
     function region:GetFrameLevel() return self.level end
     function region:EnableMouse() end
@@ -212,6 +218,16 @@ local function newRegion(kind, name, parent)
         handler(self, ...)
     end
 
+    -- Faithful to the client: SetBackdrop exists only on a frame created with
+    -- BackdropTemplate. The addon checks for the method rather than the
+    -- template, so attaching it unconditionally would make the fallback path
+    -- untestable.
+    if template == "BackdropTemplate" then
+        region.template = template
+        function region:SetBackdrop(backdrop) self.backdrop = backdrop end
+        function region:SetBackdropColor(r, g, b, a) self.backdropColour = {r, g, b, a} end
+    end
+
     if parent then parent.children[#parent.children + 1] = region end
     wow.frames[#wow.frames + 1] = region
     if name then
@@ -247,6 +263,7 @@ function wow.reset()
     wow.frames = {}
     wow.tickers = {}
     wow.inCombat = false
+    wow.backdropTemplate = true
     for name in pairs(wow.named) do
         if name ~= "UIParent" then _G[name] = nil end
     end
@@ -263,8 +280,15 @@ end
 _G.UIParent = newRegion("Frame", "UIParent", nil)
 _G.UIParent.top = SCREEN_HEIGHT
 
-_G.CreateFrame = function(kind, name, parent)
-    return newRegion(kind or "Frame", name, parent)
+-- Set false to simulate a build before 9.0, where asking for BackdropTemplate
+-- fails outright. The addon wraps that CreateFrame in pcall for exactly this.
+wow.backdropTemplate = true
+
+_G.CreateFrame = function(kind, name, parent, template)
+    if template == "BackdropTemplate" and not wow.backdropTemplate then
+        error("Unknown template BackdropTemplate", 2)
+    end
+    return newRegion(kind or "Frame", name, parent, template)
 end
 
 _G.GameTooltip = {

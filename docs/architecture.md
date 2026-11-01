@@ -71,9 +71,29 @@ The early-exit condition cannot be "every declared frame is installed" on its ow
 7. `HookScript("OnShow", ...)` — snapshots Blizzard's anchors (see [restore paths](#restore-paths)) and re-applies the saved position, deferred via `C_Timer.After(0, ...)` so it runs *after* Blizzard's panel manager, with a direct-call fallback if `C_Timer` is unavailable.
 8. Applies the saved position once right away in case the frame is already open.
 
+### The two drag mechanisms
+
+Each installed window gets both, and each is independently toggleable under the `showHandles` master switch:
+
+- **The MOVE tab** (`info.handle`) — a visible `Button` above the window's top-left corner, at frame level +12. Styleable; see below.
+- **The title-bar strip** (`info.titlebar`) — an invisible `Button` spanning the window's top edge, so the window can be dragged by its own title bar with no tab in the way.
+
+There is no portable title-bar object to hook. `MerchantFrame`'s title is a `FontString`, which cannot take mouse input, and only some of the newer frames expose a `TitleContainer`. So the strip is ours, and two things keep it from eating clicks that belong to the window: it is inset from the right by `TITLEBAR_RIGHT_INSET` (40) to clear the close button, and it takes the window's **own** frame level rather than +12, so a genuine interactive child still wins the click. Both measures are belt and braces, because swallowing a close button would make the feature worse than not having it. The harness asserts the geometry and the frame level; whether a real close button still responds needs a client.
+
+### Handle styling
+
+`ApplyHandleStyle(name)` applies the current style to one installed tab. Every visual property is set there rather than at creation, because Blizzard's frames cannot be re-created once they exist, so a style change has to be applied in place.
+
+`addon.handleStyles` holds the `dark`, `blizzard` and `minimal` presets; `custom` is built from saved variables by `addon.CustomStyle()`, which validates each field individually and falls back per-field, so a hand-edited file cannot produce an invisible or zero-sized handle.
+
+Two details worth knowing:
+
+- **`BackdropTemplate` is feature-detected twice.** The tab is created with that template inside a `pcall`, because requesting a template the build does not have fails the whole `CreateFrame`; and `SetBackdrop` is checked for before use. On a build without it, the `blizzard` style still selects and sizes correctly, just without the border.
+- **`minimal` is drawn, not textured.** Three small `SetColorTexture` dots stand in for the label. A Blizzard texture path that does not exist on a given build fails silently, and an invisible handle is indistinguishable from a broken addon.
+
 ### Handle placement
 
-`UpdateHandleAnchor(name)` anchors the handle `BOTTOMLEFT` to the frame's `TOPLEFT` at `(HANDLE_INSET_X, 0)` — just above the window — except when the window's top is within `HANDLE_HEIGHT` of `UIParent`'s top, in which case it flips to `TOPLEFT`/`TOPLEFT` at `(HANDLE_INSET_X, -2)` and sits just inside the window instead.
+`UpdateHandleAnchor(name)` anchors the handle `BOTTOMLEFT` to the frame's `TOPLEFT` at `(HANDLE_INSET_X, 0)` — just above the window — except when the window's top is within the **current style's height** of `UIParent`'s top, in which case it flips to `TOPLEFT`/`TOPLEFT` at `(HANDLE_INSET_X, -2)` and sits just inside the window instead. The height comes from `info.styleHeight`, so a shorter style flips later than a taller one.
 
 The flip exists because `SetClampedToScreen(true)` clamps the *window*, not its child handle. Without it, a window dragged to the top of the display pushes its own MOVE tab off-screen, where it cannot be clicked, and the only way back is the options panel. The comparison converts the frame's `GetTop()` into UIParent units with `ScaleRatio` first. It is re-evaluated on apply, on drag end, on reset, and from `UpdateHandles`.
 
