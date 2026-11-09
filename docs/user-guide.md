@@ -3,7 +3,7 @@
 ## Installation
 
 1. Close the game client.
-2. Copy the `ForeverWindowMover` folder into `World of Warcraft\_classic_beta_\Interface\AddOns\`.
+2. Copy the `ForeverWindowMover` folder into `World of Warcraft\_forever_\Interface\AddOns\`.
    The folder name must stay `ForeverWindowMover` so it matches `ForeverWindowMover.toc`.
 3. Start the game, and at the character select screen make sure **Forever Window Mover** is checked in the AddOns list.
 

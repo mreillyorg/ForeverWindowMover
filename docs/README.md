@@ -17,6 +17,7 @@ Addon documentation for **Forever Window Mover** 0.4.0-beta, a World of Warcraft
 | [Internal API](api-reference.md) | Functions exposed on the shared `addon` table |
 | [Saved variables](saved-variables.md) | `ForeverWindowMoverDB` schema and migration notes |
 | [Development notes](development.md) | Design constraints, the `tools/` scripts, testing checklist, release steps |
+| [In-game test plan](in-game-test-plan.md) | Manual in-game checklist for beta testing 0.4.0-beta |
 
 ## At a glance
 

@@ -11,7 +11,7 @@ Account-wide means all characters on the account share one set of window positio
 On disk it lives at:
 
 ```
-World of Warcraft\_classic_beta_\WTF\Account\<ACCOUNT>\SavedVariables\ForeverWindowMover.lua
+World of Warcraft\_forever_\WTF\Account\<ACCOUNT>\SavedVariables\ForeverWindowMover.lua
 ```
 
 ## Schema

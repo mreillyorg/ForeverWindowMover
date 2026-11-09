@@ -213,7 +213,7 @@ function Find-FwmAddOnsDirectory {
 
     if ($candidates.Count -eq 0) {
         $roots = @("${env:ProgramFiles(x86)}\World of Warcraft", "$env:ProgramFiles\World of Warcraft")
-        $flavours = @('_classic_beta_', '_classic_era_', '_classic_', '_retail_', '_ptr_', '_xptr_', '_beta_')
+        $flavours = @('_forever_', '_classic_era_', '_classic_', '_retail_', '_ptr_', '_xptr_', '_beta_')
         foreach ($root in $roots) {
             foreach ($flavour in $flavours) {
                 & $addCandidate (Join-Path $root "$flavour\Interface\AddOns")
