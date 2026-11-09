@@ -1,4 +1,4 @@
--- Forever Window Mover 0.4.0-beta
+-- Forever Window Mover 0.4.0
 -- WoW: Forever (Interface 16001)
 -- The merchant and trade mover code remains based on the working 0.1.0.
 -- Frame discovery intentionally does NOT register optional, build-specific events.
@@ -6,7 +6,7 @@
 local addonName, addon = ...
 
 -- Display-only metadata; no impact on window saving or movement.
-addon.version = "0.4.0-beta"
+addon.version = "0.4.0"
 addon.author = "Michael Reilly"
 addon.website = "https://github.com/mreillyorg/ForeverWindowMover"
 

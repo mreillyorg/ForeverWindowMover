@@ -1,4 +1,4 @@
-# ForeverWindowMover 0.4.0-beta
+# ForeverWindowMover 0.4.0
 Helps move some of the immovable Blizzard windows
 
 WoW: Forever 1.60.1 (Interface **16001**)
@@ -9,7 +9,7 @@ Source / issues: [https://github.com/mreillyorg/ForeverWindowMover](https://gith
 
 Full documentation (absolute links, because this file ships inside the addon where `docs/` does not): [docs](https://github.com/mreillyorg/ForeverWindowMover/blob/main/docs/README.md) — [user guide](https://github.com/mreillyorg/ForeverWindowMover/blob/main/docs/user-guide.md), [architecture](https://github.com/mreillyorg/ForeverWindowMover/blob/main/docs/architecture.md), [internal API](https://github.com/mreillyorg/ForeverWindowMover/blob/main/docs/api-reference.md), [saved variables](https://github.com/mreillyorg/ForeverWindowMover/blob/main/docs/saved-variables.md), [Titan integration](https://github.com/mreillyorg/ForeverWindowMover/blob/main/docs/titan-panel-integration.md), [development notes](https://github.com/mreillyorg/ForeverWindowMover/blob/main/docs/development.md)
 
-## NEW IN 0.4.0-beta: HANDLE STYLES, OR NO HANDLE AT ALL
+## NEW IN 0.4.0: HANDLE STYLES, OR NO HANDLE AT ALL
 
 A new **Options > AddOns > Forever Window Mover > Handles** page.
 

@@ -6,7 +6,7 @@ Author: Michael Reilly · Source / issues: https://github.com/mreillyorg/Forever
 
 Release dates are not recorded in the repository history, so versions are listed newest-first without dates.
 
-## 0.4.0-beta
+## 0.4.0
 
 Handle appearance and a second way to drag. Shipping as a **beta** because the title-bar option changes how mouse input reaches Blizzard's windows, and that is the one part of it no amount of offline testing can confirm — see the note at the end.
 
