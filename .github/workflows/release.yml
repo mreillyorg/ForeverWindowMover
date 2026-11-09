@@ -34,6 +34,28 @@ jobs:
           # generated release notes come out empty.
           fetch-depth: 0
 
+      # `git push origin main vX.Y.Z` starts two runs for one commit. On the
+      # branch run the packager sees the tag at HEAD, prints "Found future
+      # tag", exits 0 and builds nothing, leaving the tag run to package. This
+      # mirrors that rule (release.sh, "Prevent duplicate builds") so the
+      # package steps below are skipped exactly when the packager would skip,
+      # instead of the check failing on a .release that was never meant to
+      # exist. Any other missing .release is still a hard error.
+      - name: Detect a branch push the tag run will package
+        id: pending_tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          skip=false
+          if [[ "$GITHUB_EVENT_NAME" == "push" && "$GITHUB_REF" == refs/heads/* ]]; then
+            tags=$(git tag --points-at HEAD)
+            if [[ -n "$tags" ]]; then
+              skip=true
+              echo "::notice::HEAD is tagged ($(echo "$tags" | tr '\n' ' ')); the tag run builds, checks and publishes this commit."
+            fi
+          fi
+          echo "skip=$skip" >> "$GITHUB_OUTPUT"
+
       # The WoW client embeds Lua 5.1, so test against exactly that dialect.
       # Not LuaJIT and not 5.3/5.4: both are supersets that would let the addon
       # or a harness come to depend on something the client does not have.
@@ -66,6 +88,7 @@ jobs:
       # checked BEFORE anything is published. A CurseForge file cannot be
       # quietly withdrawn, so the order matters: verify, then publish.
       - name: Build the package without uploading
+        if: steps.pending_tag.outputs.skip != 'true'
         uses: BigWigsMods/packager@v2
         with:
           args: -d
@@ -74,6 +97,7 @@ jobs:
       # the TOC names actually present, no tests/ or tools/ content, and the
       # shipped TOC matching the repository.
       - name: Check the built package
+        if: steps.pending_tag.outputs.skip != 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -87,6 +111,7 @@ jobs:
       # The glob is deliberately narrow: release.sh also reads an optional
       # .release/.env holding upload tokens, so do not widen this to .release/*.
       - name: Upload the package as a workflow artifact
+        if: steps.pending_tag.outputs.skip != 'true'
         uses: actions/upload-artifact@v4
         with:
           name: ForeverWindowMover-package

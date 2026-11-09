@@ -288,7 +288,7 @@ The workflow runs, in order: the Lua 5.1 install, the quality gate, `tools/build
 
 Two deliberate choices in that order:
 
-- **It builds on pushes to `main` and `develop` as well as on tags.** A tag-only workflow never runs its own release steps until a release is in flight, which is the worst moment to discover one of them is broken. Branch pushes do everything except publish.
+- **It builds on pushes to `main` and `develop` as well as on tags.** A tag-only workflow never runs its own release steps until a release is in flight, which is the worst moment to discover one of them is broken. Branch pushes do everything except publish. The exception is a branch push whose HEAD is already tagged, as with `git push origin main vX.Y.Z`: that run skips the package build, check and artifact steps, because the packager refuses to build there and the tag run packages the same commit.
 - **Nothing is published that has not been checked.** The verification build uses `-d`, so the structure check runs against a real archive before any upload exists. A CurseForge file cannot be quietly withdrawn, which makes the extra few seconds of rebuilding worth it.
 
 Publishing is gated by a plain `if: startsWith(github.ref, 'refs/tags/')` on that last step rather than by computing a flag into the packager's arguments. An empty string is falsy in GitHub expressions, so the obvious `${{ cond && '' || '-d' }}` is silently *always* `-d`: publishing would be disabled while the workflow looked correct.
